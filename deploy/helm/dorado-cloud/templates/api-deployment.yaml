@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  labels:
+    {{- include "dorado-cloud.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "dorado-cloud.labels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      containers:
+        - name: api
+          image: {{ include "dorado-cloud.apiImage" . | trim }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: Auth__Issuer
+              value: {{ .Values.auth.issuer | quote }}
+            - name: Auth__DisableTransportSecurity
+              value: {{ .Values.auth.disableTransportSecurity | quote }}
+            - name: ConnectionStrings__Postgres
+              value: "Host={{ .Release.Name }}-postgres;Port=5432;Database={{ .Values.postgres.database }};Username={{ .Values.postgres.username }};Password=$(POSTGRES_PASSWORD)"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dorado-cloud.postgresSecret" . }}
+                  key: postgres-password
+            {{- if .Values.redis.enabled }}
+            - name: Redis__Configuration
+              value: "{{ .Release.Name }}-redis:6379"
+            {{- end }}
+            {{- if .Values.otel.endpoint }}
+            - name: Otel__Endpoint
+              value: {{ .Values.otel.endpoint | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,23 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+publish/
+
+# IDE / editor
+.vs/
+.idea/
+.vscode/
+*.user
+
+# Local secrets & runtime data
+.env
+*.db
+*.db-shm
+*.db-wal
+dorado-cloud-auth.db*
+data/
+
+# OS
+.DS_Store
+Thumbs.db

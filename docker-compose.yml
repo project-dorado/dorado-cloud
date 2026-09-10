@@ -1,0 +1,83 @@
+# Dorado Cloud — self-hosted stack.
+# Copy .env.example to .env and adjust before `docker compose up`.
+#
+# The API runs on :5080 (direct) and the gateway on :5088 (recommended entry
+# point). PostgreSQL is the auth/catalog store, Redis the cache, MinIO the
+# S3-compatible object store for artwork.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/DoradoCloud.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=doradocloud;Username=dorado;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      Redis__Configuration: "redis:6379"
+      Auth__Issuer: "${AUTH_ISSUER:-http://localhost:5088/}"
+      Auth__DisableTransportSecurity: "${AUTH_DISABLE_TLS:-true}"
+      Storage__Provider: "s3"
+      Storage__S3__ServiceUrl: "http://minio:9000"
+      Storage__S3__Bucket: "${MINIO_BUCKET:-dorado-cloud}"
+      Storage__S3__AccessKey: "${MINIO_ROOT_USER:?set MINIO_ROOT_USER}"
+      Storage__S3__SecretKey: "${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}"
+      Otel__Endpoint: "${OTEL_ENDPOINT:-}"
+    ports:
+      - "5080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: src/DoradoCloud.Gateway/Dockerfile
+    environment:
+      ReverseProxy__Clusters__api__Destinations__primary__Address: "http://api:8080/"
+    ports:
+      - "5088:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: doradocloud
+      POSTGRES_USER: dorado
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dorado -d doradocloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:?set MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}"
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: dorado-cloud
+description: Community cloud services for the Dorado desktop and Android clients.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/project-dorado/dorado-cloud
+sources:
+  - https://github.com/project-dorado/dorado-cloud
+maintainers:
+  - name: project-dorado
+    url: https://github.com/project-dorado
