@@ -22,6 +22,13 @@ public sealed record PagedResponse<T>(int Total, int Offset, int Limit, IReadOnl
 
 // ---- Identity / account -------------------------------------------------
 
+/// <summary>
+/// Anonymous principal envelope returned by <c>GET /v1/identity/me</c>. Fields
+/// are nullable because the endpoint is reachable with a valid bearer token
+/// whose subject may not yet be linked to a local account.
+/// </summary>
+public sealed record MeResponse(Guid? AccountId, string? Subject, string? Name, string? Email);
+
 public sealed record AccountDto(Guid Id, string Email, string DisplayName, DateTimeOffset CreatedAt);
 
 public sealed record DeviceDto(
