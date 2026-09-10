@@ -5,36 +5,48 @@ using Microsoft.Extensions.Hosting;
 namespace DoradoCloud.Tests;
 
 /// <summary>
-/// Boots the API with an isolated SQLite database and an HTTP (non-TLS) issuer
-/// so the OpenIddict flows are exercisable without certificates.
+/// Boots the API with an isolated SQLite database, an HTTP (non-TLS) issuer and
+/// a temporary update-signing key, so the full auth and release flows are
+/// exercisable without certificates or files leaking between tests.
 /// </summary>
 public sealed class CloudApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _dbPath =
         Path.Combine(Path.GetTempPath(), $"dorado-cloud-test-{Guid.NewGuid():N}.db");
 
+    private readonly string _signingKeyPath =
+        Path.Combine(Path.GetTempPath(), $"dorado-cloud-updates-{Guid.NewGuid():N}.pem");
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(Environments.Development);
         builder.UseSetting("Auth:Issuer", "http://localhost/");
         builder.UseSetting("Auth:DisableTransportSecurity", "true");
+        builder.UseSetting("Auth:UseDevelopmentCertificates", "true");
         builder.UseSetting("Auth:SqlitePath", _dbPath);
         builder.UseSetting("ConnectionStrings:Postgres", string.Empty);
+        builder.UseSetting("Updates:SigningKeyPath", _signingKeyPath);
     }
 
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+        TryDelete(_dbPath);
+        TryDelete(_signingKeyPath);
+    }
+
+    private static void TryDelete(string path)
+    {
         try
         {
-            if (File.Exists(_dbPath))
+            if (File.Exists(path))
             {
-                File.Delete(_dbPath);
+                File.Delete(path);
             }
         }
         catch
         {
-            // Best effort — the temp file is harmless.
+            // Best effort.
         }
     }
 }

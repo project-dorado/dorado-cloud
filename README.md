@@ -16,8 +16,8 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 
 | Milestone | Scope | State |
 |---|---|---|
-| **M0 Foundations** | modular monolith, gateway, OpenIddict identity, Postgres/Redis/MinIO, compose + Helm, CI→ghcr, OpenAPI, client SDK | ✅ **this scaffold** |
-| M1 Identity + sync + updates | accounts, device registry, settings sync, signed appcast | ⏳ |
+| **M0 Foundations** | modular monolith, gateway, OpenIddict identity, Postgres/Redis/MinIO, compose + Helm, CI→ghcr, OpenAPI, client SDK | ✅ |
+| **M1 Identity + sync + updates** | real accounts + login, persistent keys, device registry, settings sync, signed appcast | ✅ |
 | M2 Directory | podcast + radio search | ⏳ |
 | M3 Catalog + artwork | MusicBrainz/CAA/Discogs + art CDN | ⏳ |
 | M4 Social | profiles, activity, Zune Card, badges | ⏳ |
@@ -84,6 +84,31 @@ helm install dorado-cloud deploy/helm/dorado-cloud \
   --set auth.issuer='https://cloud.example/'
 ```
 
+## Identity, sync & updates (M1)
+
+- **Accounts** — email + password (PBKDF2 via `PasswordHasher`), browser login at
+  `/account/login` / `/account/register`, cookie session (`.dorado.sid`).
+- **OIDC** — authorization-code + PKCE for `dorado-desktop` / `dorado-hd`,
+  refresh tokens, client-credentials for services. Persistent signing/encryption
+  keys (see `Auth:Certificates:*`); development certificates are gated by
+  `Auth:UseDevelopmentCertificates`.
+- **Device registry** — register/list/remove the devices an account has enrolled.
+- **Settings sync** — a per-account JSON document with optimistic concurrency
+  (send the version you last saw; a stale write returns `409 Conflict`).
+- **Signed update feed** — publish releases and serve them with a detached
+  RS256 signature; the public key is at `/v1/updates/signing-key` and clients
+  verify with `UpdateManifestCrypto` (in `DoradoCloud.Shared`).
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /account/register`, `POST /account/login`, `POST /account/logout` | cookie | interactive account lifecycle |
+| `GET /connect/authorize`, `POST /connect/token` | OIDC | authorization-code + PKCE, refresh, client credentials |
+| `GET /v1/identity/me` | bearer | current account/service principal |
+| `GET/POST /v1/identity/me/devices`, `DELETE …/{id}` | bearer (account) | device registry |
+| `GET/PUT /v1/identity/me/settings` | bearer (account) | settings sync (versioned) |
+| `GET /v1/updates/{app}/{channel}`, `GET /v1/updates/signing-key` | public | signed update feed + verification key |
+| `POST /v1/updates/publish` | bearer (`UpdatesAdmin`) | publish a signed release |
+
 ## Calling the API
 
 ```bash
@@ -110,6 +135,10 @@ services.AddDoradoCloud(new Uri("https://cloud.dorado.example/"));
 | `Auth:SqlitePath` | SQLite file when no Postgres | `dorado-cloud-auth.db` |
 | `Auth:Issuer` | Public issuer URL advertised by OpenIddict | `http://localhost:5080/` |
 | `Auth:DisableTransportSecurity` | Allow non-TLS endpoints (dev only) | `false` |
+| `Auth:UseDevelopmentCertificates` | Use ephemeral dev certificates instead of persisted keys | `false` (`true` in Development) |
+| `Auth:Certificates:Path` / `:Password` | Directory for `openiddict-signing.pfx` / `openiddict-encryption.pfx` | `data/keys` |
+| `Updates:SigningKeyPath` | RSA PKCS#8 PEM used to sign update manifests | `data/keys/updates-signing.pem` |
+| `Updates:Admins` | Subjects/emails allowed to publish releases (empty ⇒ any authenticated) | `[]` |
 | `Redis:Configuration` | StackExchange.Redis connection | _(empty)_ |
 | `Storage:S3:*` | S3/MinIO endpoint, bucket, credentials | _(empty)_ |
 | `Otel:Endpoint` | OTLP collector endpoint (enables tracing/metrics) | _(empty)_ |

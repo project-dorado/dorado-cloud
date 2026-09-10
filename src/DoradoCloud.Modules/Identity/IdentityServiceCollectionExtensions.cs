@@ -1,12 +1,16 @@
+using DoradoCloud.Modules.Data;
 using DoradoCloud.Shared;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenIddict.Abstractions;
-using OpenIddict.Server;
 using OpenIddict.Validation.AspNetCore;
 
 namespace DoradoCloud.Modules.Identity;
@@ -21,7 +25,7 @@ public static class IdentityServiceCollectionExtensions
         var postgres = configuration.GetConnectionString("Postgres");
         var sqlitePath = configuration["Auth:SqlitePath"] ?? "dorado-cloud-auth.db";
 
-        services.AddDbContext<AuthDbContext>(options =>
+        services.AddDbContext<DoradoDbContext>(options =>
         {
             if (!string.IsNullOrWhiteSpace(postgres))
             {
@@ -35,9 +39,17 @@ public static class IdentityServiceCollectionExtensions
 
         var issuer = configuration["Auth:Issuer"] ?? "http://localhost:5080/";
         var disableTransportSecurity = configuration.GetValue("Auth:DisableTransportSecurity", environment.IsDevelopment());
+        var useDevelopmentCertificates = configuration.GetValue("Auth:UseDevelopmentCertificates", environment.IsDevelopment());
+
+        services.AddSingleton<CertificateKeyProvider>();
+
+        services.AddScoped<AccountService>();
+        services.AddScoped<DeviceService>();
+        services.AddScoped<SettingsService>();
+        services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 
         services.AddOpenIddict()
-            .AddCore(options => options.UseEntityFrameworkCore().UseDbContext<AuthDbContext>())
+            .AddCore(options => options.UseEntityFrameworkCore().UseDbContext<DoradoDbContext>())
             .AddServer(options =>
             {
                 options.SetIssuer(new Uri(issuer));
@@ -56,8 +68,19 @@ public static class IdentityServiceCollectionExtensions
                     OpenIddictConstants.Scopes.OfflineAccess,
                     DoradoCloudInfo.ApiScope);
 
-                options.AddDevelopmentEncryptionCertificate()
-                       .AddDevelopmentSigningCertificate();
+                if (useDevelopmentCertificates)
+                {
+                    options.AddDevelopmentEncryptionCertificate()
+                           .AddDevelopmentSigningCertificate();
+                }
+                else
+                {
+                    // Persistent, operator-managed key material (shared across replicas).
+                    var keyProvider = new CertificateKeyProvider(
+                        configuration, NullLogger<CertificateKeyProvider>.Instance);
+                    options.AddSigningCertificate(keyProvider.GetSigningCertificate())
+                           .AddEncryptionCertificate(keyProvider.GetEncryptionCertificate());
+                }
 
                 var aspNetCore = options.UseAspNetCore()
                        .EnableAuthorizationEndpointPassthrough()
@@ -77,19 +100,50 @@ public static class IdentityServiceCollectionExtensions
         services.AddAuthentication(options =>
         {
             options.DefaultScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+        })
+        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+        {
+            options.LoginPath = "/account/login";
+            options.LogoutPath = "/account/logout";
+            options.Cookie.Name = "dorado.sid";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = disableTransportSecurity
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+            options.ExpireTimeSpan = TimeSpan.FromDays(14);
+            options.SlidingExpiration = true;
         });
-        services.AddAuthorization();
+
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy("UpdatesAdmin", policy => policy
+                .RequireAuthenticatedUser()
+                .RequireAssertion(context =>
+                {
+                    var admins = configuration.GetSection("Updates:Admins").Get<string[]>();
+                    if (admins is null || admins.Length == 0)
+                    {
+                        return true; // no allowlist configured (single-operator/dev default)
+                    }
+
+                    var email = context.User.GetEmail();
+                    var subject = context.User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
+                    return (email is not null && admins.Contains(email, StringComparer.OrdinalIgnoreCase))
+                           || (subject is not null && admins.Contains(subject, StringComparer.OrdinalIgnoreCase));
+                }));
+        });
 
         return services;
     }
 
-    /// <summary>Creates the auth schema (dev) and seeds the known clients/scopes.</summary>
+    /// <summary>Creates the schema (dev) and seeds the known clients/scopes.</summary>
     public static async Task UseDoradoIdentityAsync(this WebApplication app)
     {
         using var scope = app.Services.CreateScope();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DoradoCloud.Identity");
 
-        var db = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<DoradoDbContext>();
         await db.Database.EnsureCreatedAsync();
 
         await IdentitySeeder.SeedAsync(scope.ServiceProvider);

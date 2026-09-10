@@ -1,6 +1,7 @@
 using DoradoCloud.Modules;
 using DoradoCloud.Modules.Catalog;
 using DoradoCloud.Modules.Identity;
+using DoradoCloud.Modules.Updates;
 using DoradoCloud.Shared;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Metrics;
@@ -16,6 +17,7 @@ builder.Services.AddDoradoModules(typeof(CatalogModule).Assembly);
 
 // OpenIddict server + local validation, EF Core persistence, health checks.
 builder.Services.AddDoradoIdentity(builder.Configuration, builder.Environment);
+builder.Services.AddDoradoUpdates();
 builder.Services.AddHealthChecks();
 
 // OpenAPI contract (Swagger UI at /swagger, spec at /swagger/v1/swagger.json).
