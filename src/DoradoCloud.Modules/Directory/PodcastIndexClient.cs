@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DoradoCloud.Shared.Contracts;
 using Microsoft.Extensions.Caching.Distributed;
+using DoradoCloud.Modules.Providers;
 using Microsoft.Extensions.Options;
 
 namespace DoradoCloud.Modules.Directory;

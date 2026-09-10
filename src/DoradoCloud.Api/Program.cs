@@ -1,7 +1,9 @@
 using DoradoCloud.Modules;
+using DoradoCloud.Modules.Artwork;
 using DoradoCloud.Modules.Catalog;
 using DoradoCloud.Modules.Directory;
 using DoradoCloud.Modules.Identity;
+using DoradoCloud.Modules.Storage;
 using DoradoCloud.Modules.Updates;
 using DoradoCloud.Shared;
 using Microsoft.OpenApi.Models;
@@ -33,6 +35,12 @@ else
 }
 
 builder.Services.AddDoradoDirectory(builder.Configuration);
+
+// Object storage (local FS default; S3/MinIO when Storage:Provider=s3), catalog
+// (MusicBrainz + Cover Art Archive) and the artwork CDN.
+builder.Services.AddDoradoStorage(builder.Configuration);
+builder.Services.AddDoradoCatalog(builder.Configuration);
+builder.Services.AddDoradoArtwork(builder.Configuration);
 
 // OpenAPI contract (Swagger UI at /swagger, spec at /swagger/v1/swagger.json).
 builder.Services.AddEndpointsApiExplorer();

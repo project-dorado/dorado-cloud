@@ -113,4 +113,25 @@ public sealed class ApiTests(CloudApiFactory factory) : IClassFixture<CloudApiFa
         Assert.NotNull(result);
         Assert.False(result!.Configured);
     }
+
+    [Fact]
+    public async Task Catalog_search_requires_a_query()
+    {
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/catalog/search");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Artwork_proxy_rejects_non_allowlisted_hosts()
+    {
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync(
+            "/v1/artwork/proxy?url=" + Uri.EscapeDataString("https://evil.example/x.png"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

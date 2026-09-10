@@ -6,9 +6,8 @@ using Microsoft.AspNetCore.Routing;
 namespace DoradoCloud.Modules.Catalog;
 
 /// <summary>
-/// Shared catalog of artists, releases and recordings. M0 returns an empty,
-/// well-formed result; the MusicBrainz / Cover Art Archive / Discogs ingest
-/// lands in M3 (see docs/adr).
+/// Shared catalog of artists, releases and recordings backed by MusicBrainz
+/// (with Cover Art Archive artwork links).
 /// </summary>
 public sealed class CatalogModule : EndpointModuleBase
 {
@@ -18,13 +17,28 @@ public sealed class CatalogModule : EndpointModuleBase
     {
         group.MapGet("/ping", () => Ping(Name));
 
-        group.MapGet("/search", (string? q, int? limit) => Results.Ok(new
+        group.MapGet("/search", async (
+            string? q,
+            string? type,
+            int? limit,
+            MusicBrainzClient catalog,
+            CancellationToken cancellationToken) =>
         {
-            query = q ?? string.Empty,
-            total = 0,
-            limit = limit ?? 20,
-            items = Array.Empty<object>(),
-            note = "Catalog indexing is scheduled for milestone M3."
-        })).WithName("catalog_search");
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                return Results.BadRequest(new { error = "query_required" });
+            }
+
+            return Results.Ok(await catalog.SearchAsync(q, type ?? "release-group", limit ?? 20, cancellationToken));
+        }).WithName("catalog_search");
+
+        group.MapGet("/artists/{mbid}", async (
+            string mbid,
+            MusicBrainzClient catalog,
+            CancellationToken cancellationToken) =>
+        {
+            var artist = await catalog.GetArtistAsync(mbid, cancellationToken);
+            return artist is null ? Results.NotFound(new { error = "artist_not_found" }) : Results.Ok(artist);
+        }).WithName("catalog_artist");
     }
 }

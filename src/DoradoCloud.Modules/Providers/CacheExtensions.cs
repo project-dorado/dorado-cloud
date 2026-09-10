@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 
-namespace DoradoCloud.Modules.Directory;
+namespace DoradoCloud.Modules.Providers;
 
-/// <summary>Small read-through cache helper over <see cref="IDistributedCache"/>.</summary>
-public static class DirectoryCache
+/// <summary>Read-through cache helper shared by the provider adapters.</summary>
+public static class CacheExtensions
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
 
@@ -23,7 +23,7 @@ public static class DirectoryCache
 
         var value = await factory(cancellationToken);
 
-        if (ttl > TimeSpan.Zero)
+        if (ttl > TimeSpan.Zero && value is not null)
         {
             await cache.SetStringAsync(
                 key,

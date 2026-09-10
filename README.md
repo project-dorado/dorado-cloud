@@ -19,7 +19,7 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 | **M0 Foundations** | modular monolith, gateway, OpenIddict identity, Postgres/Redis/MinIO, compose + Helm, CI→ghcr, OpenAPI, client SDK | ✅ |
 | **M1 Identity + sync + updates** | real accounts + login, persistent keys, device registry, settings sync, signed appcast | ✅ |
 | M2 Directory | podcast + radio search | ✅ |
-| M3 Catalog + artwork | MusicBrainz/CAA/Discogs + art CDN | ⏳ |
+| M3 Catalog + artwork | MusicBrainz/CAA + artwork CDN (object storage) | ✅ |
 | M4 Social | profiles, activity, Zune Card, badges | ⏳ |
 | M5 QuickMix | recommendations pipeline | ⏳ |
 | M6 Media | PD/CC streaming (after legal review) | ⏳ |
@@ -125,6 +125,26 @@ distributed cache (Redis in the compose stack, in-process otherwise).
 | `GET /v1/directory/podcasts/search?q=&limit=` | search podcasts by term |
 | `GET /v1/directory/radio/search?q=&country=&tag=&limit=` | search radio stations |
 
+## Catalog & artwork (M3)
+
+- **Catalog** — `MusicBrainzClient` searches artists, release-groups and
+  recordings, and looks up artists by MBID. Calls are **rate-limited per host**
+  (MusicBrainz ~1 req/s) and cached; every response carries attribution and
+  release-groups include their Cover Art Archive URL.
+- **Artwork CDN** — `ArtworkService` fetches front covers by release-group MBID
+  (or an allowlisted provider URL), caches the bytes **content-addressed in
+  object storage**, and serves them with a long-lived `Cache-Control`. Arbitrary
+  proxy URLs are restricted to an **allowlist of provider hosts** (SSRF guard).
+- **Object storage** — local filesystem by default, or **S3/MinIO** via
+  `Storage:Provider=s3`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/catalog/search?q=&type=artist\|release-group\|recording&limit=` | search the catalog |
+| `GET /v1/catalog/artists/{mbid}` | artist lookup |
+| `GET /v1/artwork/front/{releaseGroupMbid}?size=250\|500\|1200` | front cover (cached) |
+| `GET /v1/artwork/proxy?url=` | allowlisted provider imagery (cached) |
+
 ## Calling the API
 
 ```bash
@@ -158,6 +178,10 @@ services.AddDoradoCloud(new Uri("https://cloud.dorado.example/"));
 | `Directory:CacheSeconds` | TTL for cached directory responses | `300` |
 | `Directory:PodcastIndex:ApiKey` / `:ApiSecret` | Podcast Index credentials (empty ⇒ directory degrades to empty) | _(empty)_ |
 | `Directory:RadioBrowser:Enabled` | Enable the Radio-Browser adapter | `true` |
+| `Storage:Provider` | `local` or `s3` (MinIO/AWS) | `local` |
+| `Storage:S3:ServiceUrl` / `:Bucket` / `:AccessKey` / `:SecretKey` | S3-compatible endpoint + credentials | _(empty)_ |
+| `Catalog:MusicBrainzRateLimitMs` | Minimum spacing between MusicBrainz calls | `1000` |
+| `Artwork:AllowedHosts` | Hosts the artwork proxy may fetch (SSRF guard) | provider allowlist |
 | `Redis:Configuration` | StackExchange.Redis connection | _(empty)_ |
 | `Storage:S3:*` | S3/MinIO endpoint, bucket, credentials | _(empty)_ |
 | `Otel:Endpoint` | OTLP collector endpoint (enables tracing/metrics) | _(empty)_ |
