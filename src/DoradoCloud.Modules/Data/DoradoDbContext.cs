@@ -13,6 +13,12 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<UpdateRelease> UpdateReleases => Set<UpdateRelease>();
+    public DbSet<Profile> Profiles => Set<Profile>();
+    public DbSet<Follow> Follows => Set<Follow>();
+    public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<Badge> Badges => Set<Badge>();
+    public DbSet<Block> Blocks => Set<Block>();
+    public DbSet<Report> Reports => Set<Report>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -52,6 +58,48 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
             entity.Property(r => r.App).HasMaxLength(64).IsRequired();
             entity.Property(r => r.Channel).HasMaxLength(32).IsRequired();
             entity.Property(r => r.Version).HasMaxLength(64).IsRequired();
+        });
+
+        builder.Entity<Profile>(entity =>
+        {
+            entity.HasKey(p => p.AccountId);
+            entity.HasIndex(p => p.Handle).IsUnique();
+            entity.Property(p => p.Handle).HasMaxLength(32).IsRequired();
+            entity.Property(p => p.DisplayName).HasMaxLength(128).IsRequired();
+            entity.Property(p => p.Bio).HasMaxLength(512);
+        });
+
+        builder.Entity<Follow>(entity =>
+        {
+            entity.HasKey(f => new { f.FollowerAccountId, f.FolloweeAccountId });
+            entity.HasIndex(f => f.FolloweeAccountId);
+        });
+
+        builder.Entity<Activity>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            entity.HasIndex(a => new { a.AccountId, a.CreatedAt });
+            entity.Property(a => a.Kind).HasMaxLength(48).IsRequired();
+        });
+
+        builder.Entity<Badge>(entity =>
+        {
+            entity.HasKey(b => b.Id);
+            entity.HasIndex(b => new { b.AccountId, b.Code }).IsUnique();
+            entity.Property(b => b.Code).HasMaxLength(48).IsRequired();
+        });
+
+        builder.Entity<Block>(entity =>
+        {
+            entity.HasKey(b => new { b.BlockerAccountId, b.BlockedAccountId });
+        });
+
+        builder.Entity<Report>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.HasIndex(r => r.Status);
+            entity.Property(r => r.Reason).HasMaxLength(512).IsRequired();
+            entity.Property(r => r.Status).HasMaxLength(24).IsRequired();
         });
     }
 

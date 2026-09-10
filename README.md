@@ -20,7 +20,7 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 | **M1 Identity + sync + updates** | real accounts + login, persistent keys, device registry, settings sync, signed appcast | ✅ |
 | M2 Directory | podcast + radio search | ✅ |
 | M3 Catalog + artwork | MusicBrainz/CAA + artwork CDN (object storage) | ✅ |
-| M4 Social | profiles, activity, Zune Card, badges | ⏳ |
+| M4 Social | profiles, activity, Zune Card, badges | ✅ |
 | M5 QuickMix | recommendations pipeline | ⏳ |
 | M6 Media | PD/CC streaming (after legal review) | ⏳ |
 
@@ -145,6 +145,33 @@ distributed cache (Redis in the compose stack, in-process otherwise).
 | `GET /v1/artwork/front/{releaseGroupMbid}?size=250\|500\|1200` | front cover (cached) |
 | `GET /v1/artwork/proxy?url=` | allowlisted provider imagery (cached) |
 
+## Social (M4)
+
+- **Profiles** with unique handles; **follow graph** (follow/unfollow, followers/following).
+- **Activity feed** — post activities (`now-playing`, `rated`, …); the feed shows
+  your own and followed accounts' activity, newest first, and **excludes blocked
+  accounts in both directions**.
+- **Zune Card** — followers/following/activity counts, earned badges and recent
+  activity.
+- **Badges** — a static catalog (`first-post`, `connector`, …) auto-granted on
+  milestones or via `POST /me/badges/{code}`.
+- **Moderation** — block/unblock, file reports, and an admin queue
+  (`Admin` policy) to list and resolve them.
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/social/badges` | public | badge catalog |
+| `GET /v1/social/profiles/{handle}` | public | profile (+ counts, viewer state) |
+| `GET /v1/social/profiles/{handle}/followers`, `/following` | public | graph |
+| `GET /v1/social/profiles/{handle}/zunecard` | public | Zune Card |
+| `PUT/GET /v1/social/profiles/me` | bearer | create/update or read own profile |
+| `POST/DELETE /v1/social/profiles/{handle}/follow` | bearer | follow / unfollow |
+| `GET /v1/social/me/feed`, `POST /v1/social/me/activities` | bearer | feed & posting |
+| `POST /v1/social/me/badges/{code}` | bearer | grant a badge |
+| `POST/DELETE /v1/social/profiles/{handle}/block`, `GET /v1/social/me/blocks` | bearer | blocking |
+| `POST /v1/social/reports` | bearer | file a report |
+| `GET /v1/social/admin/reports`, `POST …/{id}/resolve` | bearer (`Admin`) | moderation queue |
+
 ## Calling the API
 
 ```bash
@@ -182,6 +209,7 @@ services.AddDoradoCloud(new Uri("https://cloud.dorado.example/"));
 | `Storage:S3:ServiceUrl` / `:Bucket` / `:AccessKey` / `:SecretKey` | S3-compatible endpoint + credentials | _(empty)_ |
 | `Catalog:MusicBrainzRateLimitMs` | Minimum spacing between MusicBrainz calls | `1000` |
 | `Artwork:AllowedHosts` | Hosts the artwork proxy may fetch (SSRF guard) | provider allowlist |
+| `Admin:Subjects` | Subjects/emails allowed to moderate + publish (empty ⇒ any authenticated) | `[]` |
 | `Redis:Configuration` | StackExchange.Redis connection | _(empty)_ |
 | `Storage:S3:*` | S3/MinIO endpoint, bucket, credentials | _(empty)_ |
 | `Otel:Endpoint` | OTLP collector endpoint (enables tracing/metrics) | _(empty)_ |

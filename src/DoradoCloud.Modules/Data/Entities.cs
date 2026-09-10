@@ -50,3 +50,63 @@ public sealed class UpdateRelease
     public DateTimeOffset PublishedAt { get; set; } = DateTimeOffset.UtcNow;
     public bool IsActive { get; set; } = true;
 }
+
+// ---- Social -------------------------------------------------------------
+
+/// <summary>A public social profile attached to an account.</summary>
+public sealed class Profile
+{
+    public Guid AccountId { get; set; }
+    public string Handle { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Bio { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A directed follow edge.</summary>
+public sealed class Follow
+{
+    public Guid FollowerAccountId { get; set; }
+    public Guid FolloweeAccountId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>An entry in an account's activity feed.</summary>
+public sealed class Activity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AccountId { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string PayloadJson { get; set; } = "{}";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A badge earned by an account.</summary>
+public sealed class Badge
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AccountId { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public DateTimeOffset EarnedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A block edge (blocker excludes blocked from feeds/interactions).</summary>
+public sealed class Block
+{
+    public Guid BlockerAccountId { get; set; }
+    public Guid BlockedAccountId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A moderation report against an account and/or activity.</summary>
+public sealed class Report
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ReporterAccountId { get; set; }
+    public Guid SubjectAccountId { get; set; }
+    public Guid? ActivityId { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string Status { get; set; } = "open";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

@@ -1,6 +1,7 @@
 using DoradoCloud.Modules.Data;
 using DoradoCloud.Shared;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
+using System.Security.Claims;
 
 namespace DoradoCloud.Modules.Identity;
 
@@ -115,23 +117,29 @@ public static class IdentityServiceCollectionExtensions
             options.SlidingExpiration = true;
         });
 
+        bool IsOperator(ClaimsPrincipal user)
+        {
+            var admins = configuration.GetSection("Admin:Subjects").Get<string[]>()
+                         ?? configuration.GetSection("Updates:Admins").Get<string[]>();
+            if (admins is null || admins.Length == 0)
+            {
+                return true; // no allowlist configured (single-operator/dev default)
+            }
+
+            var email = user.GetEmail();
+            var subject = user.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
+            return (email is not null && admins.Contains(email, StringComparer.OrdinalIgnoreCase))
+                   || (subject is not null && admins.Contains(subject, StringComparer.OrdinalIgnoreCase));
+        }
+
         services.AddAuthorization(options =>
         {
-            options.AddPolicy("UpdatesAdmin", policy => policy
+            void Operator(AuthorizationPolicyBuilder policy) => policy
                 .RequireAuthenticatedUser()
-                .RequireAssertion(context =>
-                {
-                    var admins = configuration.GetSection("Updates:Admins").Get<string[]>();
-                    if (admins is null || admins.Length == 0)
-                    {
-                        return true; // no allowlist configured (single-operator/dev default)
-                    }
+                .RequireAssertion(context => IsOperator(context.User));
 
-                    var email = context.User.GetEmail();
-                    var subject = context.User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
-                    return (email is not null && admins.Contains(email, StringComparer.OrdinalIgnoreCase))
-                           || (subject is not null && admins.Contains(subject, StringComparer.OrdinalIgnoreCase));
-                }));
+            options.AddPolicy("UpdatesAdmin", Operator);
+            options.AddPolicy("Admin", Operator);
         });
 
         return services;
