@@ -3,6 +3,7 @@ using DoradoCloud.Modules.Artwork;
 using DoradoCloud.Modules.Catalog;
 using DoradoCloud.Modules.Directory;
 using DoradoCloud.Modules.Identity;
+using DoradoCloud.Modules.Recommendations;
 using DoradoCloud.Modules.Social;
 using DoradoCloud.Modules.Storage;
 using DoradoCloud.Modules.Updates;
@@ -23,6 +24,7 @@ builder.Services.AddDoradoModules(typeof(CatalogModule).Assembly);
 builder.Services.AddDoradoIdentity(builder.Configuration, builder.Environment);
 builder.Services.AddDoradoUpdates();
 builder.Services.AddDoradoSocial();
+builder.Services.AddDoradoRecommendations();
 builder.Services.AddHealthChecks();
 
 // Response caching: Redis when configured, otherwise an in-process cache.

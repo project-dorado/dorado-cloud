@@ -6,9 +6,8 @@ using Microsoft.AspNetCore.Routing;
 namespace DoradoCloud.Modules.Recommendations;
 
 /// <summary>
-/// QuickMix similarity/recommendation service. M0 exposes the contract; the
-/// ListenBrainz / AcousticBrainz ingest and the pgvector ranking pipeline land
-/// in M5.
+/// QuickMix similarity recommendations. Accepts a seed (artist name or MBID)
+/// and returns scored, explained candidates.
 /// </summary>
 public sealed class RecommendationsModule : EndpointModuleBase
 {
@@ -18,14 +17,32 @@ public sealed class RecommendationsModule : EndpointModuleBase
     {
         group.MapGet("/ping", () => Ping(Name));
 
-        group.MapPost("/quickmix", (QuickMixRequest request) => Results.Ok(new
+        group.MapGet("/quickmix", async (
+            string? seed,
+            int? limit,
+            QuickMixService quickMix,
+            CancellationToken cancellationToken) =>
         {
-            seed = request.Seed,
-            mode = request.Mode ?? "similar",
-            total = 0,
-            items = Array.Empty<object>(),
-            note = "QuickMix ranking is scheduled for milestone M5."
-        })).WithName("recs_quickmix");
+            if (string.IsNullOrWhiteSpace(seed))
+            {
+                return Results.BadRequest(new { error = "seed_required" });
+            }
+
+            return Results.Ok(await quickMix.RecommendAsync(seed, limit ?? 20, cancellationToken));
+        }).WithName("recs_quickmix");
+
+        group.MapPost("/quickmix", async (
+            QuickMixRequest request,
+            QuickMixService quickMix,
+            CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Seed))
+            {
+                return Results.BadRequest(new { error = "seed_required" });
+            }
+
+            return Results.Ok(await quickMix.RecommendAsync(request.Seed, request.Limit ?? 20, cancellationToken));
+        }).WithName("recs_quickmix_post");
     }
 
     public sealed record QuickMixRequest(string Seed, string? Mode, int? Limit);

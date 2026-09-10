@@ -84,6 +84,68 @@ public sealed class MusicBrainzClient(
         }, cancellationToken);
     }
 
+    /// <summary>Top genre tags for an artist (most-applied first).</summary>
+    public async Task<IReadOnlyList<string>> GetArtistGenresAsync(string mbid, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync($"ws/2/artist/{Uri.EscapeDataString(mbid)}?fmt=json&inc=tags", cancellationToken);
+
+        if (!json.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return tags.EnumerateArray()
+            .Select(tag => new
+            {
+                Name = tag.TryGetProperty("name", out var n) ? n.GetString() : null,
+                Count = tag.TryGetProperty("count", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0
+            })
+            .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+            .OrderByDescending(t => t.Count)
+            .Select(t => t.Name!.ToLowerInvariant())
+            .Take(3)
+            .ToList();
+    }
+
+    /// <summary>Artists related to the given artist (band members, collaborators, …).</summary>
+    public async Task<IReadOnlyList<CatalogSearchItem>> GetRelatedArtistsAsync(string mbid, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync($"ws/2/artist/{Uri.EscapeDataString(mbid)}?fmt=json&inc=artist-rels", cancellationToken);
+        var results = new List<CatalogSearchItem>();
+
+        if (!json.TryGetProperty("relations", out var relations) || relations.ValueKind != JsonValueKind.Array)
+        {
+            return results;
+        }
+
+        foreach (var relation in relations.EnumerateArray())
+        {
+            if (!relation.TryGetProperty("artist", out var artist))
+            {
+                continue;
+            }
+
+            var id = artist.TryGetProperty("id", out var i) ? i.GetString() : null;
+            var name = artist.TryGetProperty("name", out var n) ? n.GetString() : null;
+
+            if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(name))
+            {
+                results.Add(new CatalogSearchItem("artist", id, name, name, string.Empty, null));
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>Artists tagged with the given genre.</summary>
+    public async Task<IReadOnlyList<CatalogSearchItem>> SearchByTagAsync(string tag, int limit, CancellationToken cancellationToken)
+    {
+        var query = Uri.EscapeDataString($"tag:\"{tag}\"");
+        var json = await GetJsonAsync(
+            $"ws/2/artist/?query={query}&fmt=json&limit={Math.Clamp(limit, 1, 25)}", cancellationToken);
+        return MapArtists(json);
+    }
+
     private async Task<JsonElement> GetJsonAsync(string relativeUrl, CancellationToken cancellationToken)
     {
         var settings = options.Value;

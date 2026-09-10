@@ -21,7 +21,7 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 | M2 Directory | podcast + radio search | ✅ |
 | M3 Catalog + artwork | MusicBrainz/CAA + artwork CDN (object storage) | ✅ |
 | M4 Social | profiles, activity, Zune Card, badges | ✅ |
-| M5 QuickMix | recommendations pipeline | ⏳ |
+| M5 QuickMix | similarity recommendations | ✅ (heuristic engine; pgvector later) |
 | M6 Media | PD/CC streaming (after legal review) | ⏳ |
 
 ## Architecture
@@ -171,6 +171,20 @@ distributed cache (Redis in the compose stack, in-process otherwise).
 | `POST/DELETE /v1/social/profiles/{handle}/block`, `GET /v1/social/me/blocks` | bearer | blocking |
 | `POST /v1/social/reports` | bearer | file a report |
 | `GET /v1/social/admin/reports`, `POST …/{id}/resolve` | bearer (`Admin`) | moderation queue |
+
+## QuickMix (M5)
+
+`GET /v1/recs/quickmix?seed=&limit=` turns an artist name **or** MBID into scored,
+explained recommendations. The pragmatic engine:
+
+1. resolves the seed (MusicBrainz search when a name is given),
+2. scores **related artists** (band members / collaborators) and artists that
+   **share the seed's top genre tags**, and
+3. returns ranked candidates with a score and human-readable reasons.
+
+It is deterministic, cached and offline-testable. The endpoint contract is stable,
+so a **pgvector embedding** pipeline (ListenBrainz/AcousticBrainz) can replace the
+scoring later without client changes.
 
 ## Calling the API
 

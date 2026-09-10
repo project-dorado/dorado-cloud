@@ -134,4 +134,14 @@ public sealed class ApiTests(CloudApiFactory factory) : IClassFixture<CloudApiFa
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task QuickMix_requires_a_seed()
+    {
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/recs/quickmix");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }
