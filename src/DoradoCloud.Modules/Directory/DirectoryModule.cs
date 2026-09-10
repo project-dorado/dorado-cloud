@@ -1,4 +1,5 @@
 using DoradoCloud.Modules.Abstractions;
+using DoradoCloud.Shared.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -6,8 +7,9 @@ using Microsoft.AspNetCore.Routing;
 namespace DoradoCloud.Modules.Directory;
 
 /// <summary>
-/// Podcast and radio directory. M0 exposes the contract; Podcast Index and
-/// Radio-Browser adapters land in M2.
+/// Podcast (Podcast Index) and radio (Radio-Browser) search. Results carry
+/// provider attribution; when a provider is unconfigured the endpoint returns a
+/// well-formed empty response rather than an error.
 /// </summary>
 public sealed class DirectoryModule : EndpointModuleBase
 {
@@ -17,20 +19,34 @@ public sealed class DirectoryModule : EndpointModuleBase
     {
         group.MapGet("/ping", () => Ping(Name));
 
-        group.MapGet("/podcasts/search", (string? q) => Results.Ok(new
+        group.MapGet("/podcasts/search", async (
+            string? q,
+            int? limit,
+            PodcastIndexClient podcasts,
+            CancellationToken cancellationToken) =>
         {
-            query = q ?? string.Empty,
-            total = 0,
-            items = Array.Empty<object>(),
-            note = "Podcast directory is scheduled for milestone M2."
-        })).WithName("directory_podcasts_search");
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                return Results.BadRequest(new { error = "query_required" });
+            }
 
-        group.MapGet("/radio/search", (string? q) => Results.Ok(new
+            return Results.Ok(await podcasts.SearchAsync(q, limit ?? 20, cancellationToken));
+        }).WithName("directory_podcasts_search");
+
+        group.MapGet("/radio/search", async (
+            string? q,
+            string? country,
+            string? tag,
+            int? limit,
+            RadioBrowserClient radio,
+            CancellationToken cancellationToken) =>
         {
-            query = q ?? string.Empty,
-            total = 0,
-            items = Array.Empty<object>(),
-            note = "Radio directory is scheduled for milestone M2."
-        })).WithName("directory_radio_search");
+            if (string.IsNullOrWhiteSpace(q) && string.IsNullOrWhiteSpace(country) && string.IsNullOrWhiteSpace(tag))
+            {
+                return Results.BadRequest(new { error = "query_required" });
+            }
+
+            return Results.Ok(await radio.SearchAsync(q ?? string.Empty, limit ?? 30, country, tag, cancellationToken));
+        }).WithName("directory_radio_search");
     }
 }

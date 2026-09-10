@@ -26,6 +26,9 @@ public sealed class CloudApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Auth:SqlitePath", _dbPath);
         builder.UseSetting("ConnectionStrings:Postgres", string.Empty);
         builder.UseSetting("Updates:SigningKeyPath", _signingKeyPath);
+        // Keep tests off the network: the radio directory is disabled and the
+        // podcast directory has no key (both then degrade to empty responses).
+        builder.UseSetting("Directory:RadioBrowser:Enabled", "false");
     }
 
     protected override void Dispose(bool disposing)

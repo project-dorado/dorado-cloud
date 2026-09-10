@@ -1,5 +1,6 @@
 using DoradoCloud.Modules;
 using DoradoCloud.Modules.Catalog;
+using DoradoCloud.Modules.Directory;
 using DoradoCloud.Modules.Identity;
 using DoradoCloud.Modules.Updates;
 using DoradoCloud.Shared;
@@ -19,6 +20,19 @@ builder.Services.AddDoradoModules(typeof(CatalogModule).Assembly);
 builder.Services.AddDoradoIdentity(builder.Configuration, builder.Environment);
 builder.Services.AddDoradoUpdates();
 builder.Services.AddHealthChecks();
+
+// Response caching: Redis when configured, otherwise an in-process cache.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Redis:Configuration"]))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+        options.Configuration = builder.Configuration["Redis:Configuration"]);
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
+
+builder.Services.AddDoradoDirectory(builder.Configuration);
 
 // OpenAPI contract (Swagger UI at /swagger, spec at /swagger/v1/swagger.json).
 builder.Services.AddEndpointsApiExplorer();

@@ -90,4 +90,27 @@ public sealed class ApiTests(CloudApiFactory factory) : IClassFixture<CloudApiFa
         var me = await authed.GetAsync("/v1/identity/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
     }
+
+    [Fact]
+    public async Task Directory_podcast_search_degrades_without_keys()
+    {
+        var client = factory.CreateClient();
+
+        var result = await client.GetFromJsonAsync<PodcastSearchResponse>("/v1/directory/podcasts/search?q=dorado");
+
+        Assert.NotNull(result);
+        Assert.False(result!.Configured);
+        Assert.Contains("Podcast Index", result.Attribution);
+    }
+
+    [Fact]
+    public async Task Directory_radio_search_reports_disabled_state()
+    {
+        var client = factory.CreateClient();
+
+        var result = await client.GetFromJsonAsync<RadioSearchResponse>("/v1/directory/radio/search?q=jazz");
+
+        Assert.NotNull(result);
+        Assert.False(result!.Configured);
+    }
 }

@@ -18,7 +18,7 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 |---|---|---|
 | **M0 Foundations** | modular monolith, gateway, OpenIddict identity, Postgres/Redis/MinIO, compose + Helm, CI→ghcr, OpenAPI, client SDK | ✅ |
 | **M1 Identity + sync + updates** | real accounts + login, persistent keys, device registry, settings sync, signed appcast | ✅ |
-| M2 Directory | podcast + radio search | ⏳ |
+| M2 Directory | podcast + radio search | ✅ |
 | M3 Catalog + artwork | MusicBrainz/CAA/Discogs + art CDN | ⏳ |
 | M4 Social | profiles, activity, Zune Card, badges | ⏳ |
 | M5 QuickMix | recommendations pipeline | ⏳ |
@@ -109,6 +109,22 @@ helm install dorado-cloud deploy/helm/dorado-cloud \
 | `GET /v1/updates/{app}/{channel}`, `GET /v1/updates/signing-key` | public | signed update feed + verification key |
 | `POST /v1/updates/publish` | bearer (`UpdatesAdmin`) | publish a signed release |
 
+## Directory — podcasts & radio (M2)
+
+Thin, cached adapters over open providers:
+
+- **Podcasts** via **Podcast Index** (requires an API key/secret; searches are
+  signed per request). Unconfigured ⇒ a well-formed empty response, not an error.
+- **Radio** via **Radio-Browser** (no key; can be disabled).
+
+Responses carry the provider **attribution**; results are cached in the
+distributed cache (Redis in the compose stack, in-process otherwise).
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/directory/podcasts/search?q=&limit=` | search podcasts by term |
+| `GET /v1/directory/radio/search?q=&country=&tag=&limit=` | search radio stations |
+
 ## Calling the API
 
 ```bash
@@ -139,6 +155,9 @@ services.AddDoradoCloud(new Uri("https://cloud.dorado.example/"));
 | `Auth:Certificates:Path` / `:Password` | Directory for `openiddict-signing.pfx` / `openiddict-encryption.pfx` | `data/keys` |
 | `Updates:SigningKeyPath` | RSA PKCS#8 PEM used to sign update manifests | `data/keys/updates-signing.pem` |
 | `Updates:Admins` | Subjects/emails allowed to publish releases (empty ⇒ any authenticated) | `[]` |
+| `Directory:CacheSeconds` | TTL for cached directory responses | `300` |
+| `Directory:PodcastIndex:ApiKey` / `:ApiSecret` | Podcast Index credentials (empty ⇒ directory degrades to empty) | _(empty)_ |
+| `Directory:RadioBrowser:Enabled` | Enable the Radio-Browser adapter | `true` |
 | `Redis:Configuration` | StackExchange.Redis connection | _(empty)_ |
 | `Storage:S3:*` | S3/MinIO endpoint, bucket, credentials | _(empty)_ |
 | `Otel:Endpoint` | OTLP collector endpoint (enables tracing/metrics) | _(empty)_ |
