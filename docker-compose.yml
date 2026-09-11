@@ -34,6 +34,10 @@ services:
       Apps__CorpusRoot: "${RESOURCES_APPS_ROOT:-}"
       Tuners__CorpusRoot: "${RESOURCES_TUNERS_ROOT:-}"
       Legacy__Login__Enabled: "${LEGACY_LOGIN_ENABLED:-false}"
+      # DRM-free media (legal-gated) and similarity embeddings (opt-in).
+      Media__Enabled: "${MEDIA_ENABLED:-false}"
+      Embedding__Enabled: "${EMBEDDING_ENABLED:-false}"
+      Embedding__UsePgvector: "${EMBEDDING_USE_PGVECTOR:-false}"
     volumes:
       - "${RESOURCES_CORPUS_HOST:-./corpus}:/corpus:ro"
     ports:

@@ -22,6 +22,7 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<LegacySession> LegacySessions => Set<LegacySession>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+    public DbSet<TrackEmbedding> TrackEmbeddings => Set<TrackEmbedding>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -134,6 +135,14 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
             entity.Property(a => a.Provider).HasMaxLength(64);
             entity.Property(a => a.ContentType).HasMaxLength(128);
             entity.Property(a => a.ContentHash).HasMaxLength(64).IsRequired();
+        });
+
+        builder.Entity<TrackEmbedding>(entity =>
+        {
+            entity.HasKey(e => e.Mbid);
+            entity.Property(e => e.Mbid).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(256);
+            entity.Property(e => e.EmbeddingJson).IsRequired();
         });
     }
 

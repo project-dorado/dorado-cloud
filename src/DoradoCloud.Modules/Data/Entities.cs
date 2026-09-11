@@ -158,3 +158,18 @@ public sealed class MediaAsset
     public long SizeBytes { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// A per-MBID similarity embedding (M10). Stored as JSON text so it works on
+/// SQLite and PostgreSQL alike; when <c>Embedding:UsePgvector</c> is enabled an
+/// operator adds a pgvector column/index (see <c>deploy/pgvector/init.sql</c>)
+/// for accelerated search.
+/// </summary>
+public sealed class TrackEmbedding
+{
+    public string Mbid { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string EmbeddingJson { get; set; } = string.Empty;
+    public int Dimensions { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

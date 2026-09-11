@@ -43,7 +43,31 @@ public sealed class RecommendationsModule : EndpointModuleBase
 
             return Results.Ok(await quickMix.RecommendAsync(request.Seed, request.Limit ?? 20, cancellationToken));
         }).WithName("recs_quickmix_post");
+
+        group.MapPost("/embeddings", async (
+            EmbeddingUpsertRequest request,
+            EmbeddingService embeddings,
+            CancellationToken cancellationToken) =>
+        {
+            if (!embeddings.Enabled)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status501NotImplemented,
+                    title: "Embedding ingestion disabled",
+                    detail: "Set Embedding:Enabled=true to accept embeddings.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Mbid) || request.Vector is null || request.Vector.Length == 0)
+            {
+                return Results.BadRequest(new { error = "mbid_and_vector_required" });
+            }
+
+            var record = await embeddings.UpsertAsync(request.Mbid, request.Title ?? string.Empty, request.Vector, cancellationToken);
+            return Results.Ok(record);
+        }).RequireAuthorization("Admin").WithName("recs_embeddings_upsert");
     }
 
     public sealed record QuickMixRequest(string Seed, string? Mode, int? Limit);
+
+    public sealed record EmbeddingUpsertRequest(string Mbid, string? Title, float[] Vector);
 }

@@ -35,7 +35,7 @@ builder.Services.AddDoradoModules(typeof(CatalogModule).Assembly);
 builder.Services.AddDoradoIdentity(builder.Configuration, builder.Environment);
 builder.Services.AddDoradoUpdates();
 builder.Services.AddDoradoSocial();
-builder.Services.AddDoradoRecommendations();
+builder.Services.AddDoradoRecommendations(builder.Configuration);
 builder.Services.AddHealthChecks();
 
 // Response caching: Redis when configured, otherwise an in-process cache.

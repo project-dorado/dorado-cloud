@@ -15,7 +15,8 @@ namespace DoradoCloud.Modules.Recommendations;
 public sealed class QuickMixService(
     MusicBrainzClient brainz,
     IDistributedCache cache,
-    IOptions<CatalogOptions> options)
+    IOptions<CatalogOptions> options,
+    EmbeddingService? embeddings = null)
 {
     public async Task<QuickMixResponse> RecommendAsync(string seed, int limit, CancellationToken cancellationToken)
     {
@@ -76,6 +77,22 @@ public sealed class QuickMixService(
                 foreach (var artist in await brainz.SearchByTagAsync(genre, 15, token))
                 {
                     Add(artist, 1.0, $"shares genre {genre}");
+                }
+            }
+
+            // Blend in embedding neighbours when the seed has a vector (M10).
+            if (embeddings is not null)
+            {
+                var seedVector = await embeddings.GetVectorAsync(seedMbid!, token);
+                if (seedVector is not null)
+                {
+                    foreach (var neighbour in await embeddings.NearestAsync(seedVector, limit * 2, token))
+                    {
+                        Add(
+                            new CatalogSearchItem("artist", neighbour.Mbid, neighbour.Title, neighbour.Title, string.Empty, null),
+                            1.5 * Math.Max(neighbour.Score, 0),
+                            "embedding similarity");
+                    }
                 }
             }
 
