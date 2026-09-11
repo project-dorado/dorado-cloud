@@ -11,6 +11,7 @@ using DoradoCloud.Modules.Legacy.Resources;
 using DoradoCloud.Modules.Legacy.Session;
 using DoradoCloud.Modules.Legacy.Tiles;
 using DoradoCloud.Modules.Legacy.Tuners;
+using DoradoCloud.Modules.Media;
 using DoradoCloud.Modules.Recommendations;
 using DoradoCloud.Modules.Social;
 using DoradoCloud.Modules.Storage;
@@ -60,6 +61,9 @@ builder.Services.AddDoradoLegacyTuners(builder.Configuration);
 builder.Services.AddDoradoLegacyInbox();
 builder.Services.AddDoradoLegacySessions(builder.Configuration);
 builder.Services.AddDoradoLegacyLogin(builder.Configuration);
+
+// DRM-free (PD/CC) media; legal-gated and disabled unless Media:Enabled=true.
+builder.Services.AddDoradoMedia(builder.Configuration);
 
 // Object storage (local FS default; S3/MinIO when Storage:Provider=s3), catalog
 // (MusicBrainz + Cover Art Archive) and the artwork CDN.

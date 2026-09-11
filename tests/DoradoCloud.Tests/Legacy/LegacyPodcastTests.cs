@@ -1,5 +1,5 @@
 using System.Net;
-using DoradoCloud.Modules.Legacy.Catalog;
+using DoradoCloud.Modules.Providers;
 
 namespace DoradoCloud.Tests.Legacy;
 
@@ -78,5 +78,5 @@ public sealed class LegacyPodcastTests(CloudApiFactory factory) : IClassFixture<
     [InlineData("example.com", false)]
     [InlineData("8.8.8.8", false)]
     public void Ssrf_guard_classifies_hosts(string host, bool blocked)
-        => Assert.Equal(blocked, RssProxyClient.IsBlockedHost(host));
+        => Assert.Equal(blocked, SsrfGuard.IsBlockedHost(host));
 }

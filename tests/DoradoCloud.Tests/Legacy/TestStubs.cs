@@ -1,4 +1,5 @@
 using System.Net;
+using DoradoCloud.Modules.Storage;
 using Microsoft.Extensions.Caching.Distributed;
 
 namespace DoradoCloud.Tests.Legacy;
@@ -46,4 +47,22 @@ internal sealed class FakeDistributedCache : IDistributedCache
         _store.Remove(key);
         return Task.CompletedTask;
     }
+}
+
+/// <summary>An in-memory <see cref="IObjectStorage"/> for tests.</summary>
+internal sealed class InMemoryObjectStorage : IObjectStorage
+{
+    public Dictionary<string, byte[]> Objects { get; } = new();
+
+    public Task<byte[]?> GetAsync(string key, CancellationToken cancellationToken = default)
+        => Task.FromResult(Objects.TryGetValue(key, out var value) ? value : null);
+
+    public Task PutAsync(string key, byte[] content, string contentType, CancellationToken cancellationToken = default)
+    {
+        Objects[key] = content;
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ExistsAsync(string key, CancellationToken cancellationToken = default)
+        => Task.FromResult(Objects.ContainsKey(key));
 }

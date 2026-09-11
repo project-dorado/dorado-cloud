@@ -138,3 +138,23 @@ public sealed class LegacySession
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? LastUsedAt { get; set; }
 }
+
+/// <summary>
+/// A DRM-free media asset (public-domain / Creative Commons only). Bytes live in
+/// object storage keyed by <see cref="ContentHash"/>; this row carries the
+/// license metadata required by the M6 legal gate. Never enabled by default.
+/// </summary>
+public sealed class MediaAsset
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Title { get; set; } = string.Empty;
+    public string Creator { get; set; } = string.Empty;
+    public string License { get; set; } = string.Empty;
+    public string LicenseUrl { get; set; } = string.Empty;
+    public string SourceUrl { get; set; } = string.Empty;
+    public string Provider { get; set; } = string.Empty;
+    public string ContentType { get; set; } = "application/octet-stream";
+    public string ContentHash { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

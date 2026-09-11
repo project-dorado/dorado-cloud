@@ -1,5 +1,5 @@
-using System.Net;
 using DoradoCloud.Legacy;
+using DoradoCloud.Modules.Providers;
 
 namespace DoradoCloud.Modules.Legacy.Catalog;
 
@@ -8,10 +8,9 @@ public sealed record RssFetchResult(byte[] Content, string ContentType);
 
 /// <summary>
 /// Fetches a podcast RSS feed on behalf of the legacy client
-/// (<c>catalog.zune.net/podcast?url=</c>). SSRF-hardened: HTTPS only, private /
-/// loopback / local host names rejected, and a hard size cap. This is a
-/// best-effort guard (it does not defend against DNS rebinding) and is
-/// documented as such.
+/// (<c>catalog.zune.net/podcast?url=</c>). SSRF-hardened via
+/// <see cref="SsrfGuard"/>: HTTPS only, private / loopback / local host names
+/// rejected, and a hard size cap.
 /// </summary>
 public sealed class RssProxyClient(HttpClient http)
 {
@@ -24,7 +23,7 @@ public sealed class RssProxyClient(HttpClient http)
             return null;
         }
 
-        if (IsBlockedHost(uri.Host))
+        if (SsrfGuard.IsBlockedHost(uri.Host))
         {
             return null;
         }
@@ -51,46 +50,5 @@ public sealed class RssProxyClient(HttpClient http)
         {
             return null;
         }
-    }
-
-    /// <summary>True when a host must not be fetched (loopback/private/local).</summary>
-    public static bool IsBlockedHost(string host)
-    {
-        if (string.IsNullOrWhiteSpace(host))
-        {
-            return true;
-        }
-
-        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-            || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
-            || host.EndsWith(".internal", StringComparison.OrdinalIgnoreCase)
-            || host.EndsWith(".home", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return IPAddress.TryParse(host, out var ip) && IsPrivate(ip);
-    }
-
-    private static bool IsPrivate(IPAddress ip)
-    {
-        if (IPAddress.IsLoopback(ip))
-        {
-            return true;
-        }
-
-        var bytes = ip.GetAddressBytes();
-        return ip.AddressFamily switch
-        {
-            System.Net.Sockets.AddressFamily.InterNetwork =>
-                bytes[0] == 10
-                || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
-                || (bytes[0] == 192 && bytes[1] == 168)
-                || (bytes[0] == 169 && bytes[1] == 254)
-                || bytes[0] == 127,
-            System.Net.Sockets.AddressFamily.InterNetworkV6 =>
-                ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || (bytes[0] & 0xfe) == 0xfc,
-            _ => true
-        };
     }
 }

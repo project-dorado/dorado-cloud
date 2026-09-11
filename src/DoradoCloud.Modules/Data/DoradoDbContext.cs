@@ -21,6 +21,7 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<LegacySession> LegacySessions => Set<LegacySession>();
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -119,6 +120,20 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
             entity.HasKey(s => s.TokenHash);
             entity.HasIndex(s => s.AccountId);
             entity.Property(s => s.TokenHash).HasMaxLength(64).IsRequired();
+        });
+
+        builder.Entity<MediaAsset>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            entity.HasIndex(a => a.ContentHash);
+            entity.Property(a => a.Title).HasMaxLength(256).IsRequired();
+            entity.Property(a => a.Creator).HasMaxLength(256);
+            entity.Property(a => a.License).HasMaxLength(64).IsRequired();
+            entity.Property(a => a.LicenseUrl).HasMaxLength(512);
+            entity.Property(a => a.SourceUrl).HasMaxLength(1024).IsRequired();
+            entity.Property(a => a.Provider).HasMaxLength(64);
+            entity.Property(a => a.ContentType).HasMaxLength(128);
+            entity.Property(a => a.ContentHash).HasMaxLength(64).IsRequired();
         });
     }
 
