@@ -8,6 +8,7 @@ using DoradoCloud.Modules.Legacy.Catalog;
 using DoradoCloud.Modules.Legacy.Inbox;
 using DoradoCloud.Modules.Legacy.Login;
 using DoradoCloud.Modules.Legacy.Resources;
+using DoradoCloud.Modules.Legacy.Session;
 using DoradoCloud.Modules.Legacy.Tiles;
 using DoradoCloud.Modules.Legacy.Tuners;
 using DoradoCloud.Modules.Recommendations;
@@ -57,6 +58,7 @@ builder.Services.AddDoradoLegacyTiles(builder.Configuration);
 builder.Services.AddDoradoLegacyApps(builder.Configuration);
 builder.Services.AddDoradoLegacyTuners(builder.Configuration);
 builder.Services.AddDoradoLegacyInbox();
+builder.Services.AddDoradoLegacySessions(builder.Configuration);
 builder.Services.AddDoradoLegacyLogin(builder.Configuration);
 
 // Object storage (local FS default; S3/MinIO when Storage:Provider=s3), catalog
@@ -151,6 +153,10 @@ app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Legacy Zune clients authenticate with a WS-Trust ticket in the
+// `Authorization: WLID1.0 <ticket>` header; resolve it to an account.
+app.UseLegacyZuneSessions();
 
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready");

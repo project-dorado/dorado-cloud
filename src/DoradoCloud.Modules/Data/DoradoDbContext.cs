@@ -20,6 +20,7 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<LegacySession> LegacySessions => Set<LegacySession>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -111,6 +112,13 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
             entity.Property(m => m.RecipientTag).HasMaxLength(32).IsRequired();
             entity.Property(m => m.Subject).HasMaxLength(256);
             entity.Property(m => m.Body).HasMaxLength(4096);
+        });
+
+        builder.Entity<LegacySession>(entity =>
+        {
+            entity.HasKey(s => s.TokenHash);
+            entity.HasIndex(s => s.AccountId);
+            entity.Property(s => s.TokenHash).HasMaxLength(64).IsRequired();
         });
     }
 

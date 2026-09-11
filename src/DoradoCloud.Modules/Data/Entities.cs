@@ -123,3 +123,18 @@ public sealed class InboxMessage
     public bool IsRead { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>
+/// A legacy Zune WS-Trust session. Only the SHA-256 of the opaque ticket is
+/// stored (the raw ticket is returned once to the client and re-sent as
+/// <c>Authorization: WLID1.0 &lt;ticket&gt;</c>, matching the original client).
+/// </summary>
+public sealed class LegacySession
+{
+    /// <summary>Uppercase SHA-256 hex of the opaque ticket; primary key.</summary>
+    public string TokenHash { get; set; } = string.Empty;
+    public Guid AccountId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? LastUsedAt { get; set; }
+}
