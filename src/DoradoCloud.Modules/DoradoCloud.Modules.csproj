@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DoradoCloud.Shared\DoradoCloud.Shared.csproj" />
+    <ProjectReference Include="..\DoradoCloud.Legacy\DoradoCloud.Legacy.csproj" />
   </ItemGroup>
 
   <ItemGroup>

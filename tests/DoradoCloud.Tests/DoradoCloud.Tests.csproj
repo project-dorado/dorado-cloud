@@ -26,6 +26,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DoradoCloud.Api\DoradoCloud.Api.csproj" />
     <ProjectReference Include="..\..\src\DoradoCloud.Shared\DoradoCloud.Shared.csproj" />
+    <ProjectReference Include="..\..\src\DoradoCloud.Legacy\DoradoCloud.Legacy.csproj" />
+    <ProjectReference Include="..\..\src\DoradoCloud.Modules\DoradoCloud.Modules.csproj" />
   </ItemGroup>
 
 </Project>
