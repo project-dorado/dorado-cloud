@@ -20,8 +20,9 @@ adapters; the remaining rows are planned (native-provider enrichment or M6).
 | MusicBrainz + Cover Art Archive | CC0 / public domain metadata | catalog, MBIDs, cover art (shipped, M3) |
 | Podcast Index | API terms | podcast directory (shipped, M2) |
 | Radio-Browser | public-domain catalog | radio directory (shipped, M2) |
-| Fanart.tv | API terms (key required) | artist artwork (allowlisted proxy; native adapter planned) |
-| TheAudioDB | API terms | artist/album artwork (allowlisted proxy; native adapter planned) |
+| Fanart.tv | API terms (key required) | artist artwork (optional adapter; disabled without a key) |
+| TheAudioDB | API terms | artist artwork (optional adapter; disabled without a key) |
+| Discogs | API terms (token required) | artist imagery/enrichment (optional adapter; disabled without a token) |
 | Wikipedia / Wikimedia | CC BY-SA | artist biographies, images (allowlisted proxy) |
 | AcoustID / Chromaprint | public API + tool | scan-time fingerprinting in the desktop client |
 | ListenBrainz / AcousticBrainz | open data | recommendations (pgvector upgrade — planned) |

@@ -83,8 +83,9 @@ It issues host-header requests to every legacy host and reports status codes.
 
 ## Known limitations
 
-- `image.catalog.zune.net/music/artist/{id}/{type}` returns `404` until a
-  keyless artist-image provider is added (`image` covers front covers).
+- `image.catalog.zune.net/music/artist/{id}/{type}` resolves best-effort via
+  keyless Wikidata/Wikimedia and the optional Fanart.tv/TheAudioDB/Discogs
+  providers; it returns `404` when none has an image for the artist.
 - Movie/video catalog hubs return valid empty feeds.
 - `commerce.zune.net` purchase/billing and Zune-Pass DRM/license endpoints are
   intentionally not implemented.

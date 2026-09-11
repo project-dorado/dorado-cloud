@@ -21,9 +21,14 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 | M2 Directory | podcast + radio search | ✅ |
 | M3 Catalog + artwork | MusicBrainz/CAA + artwork CDN (object storage) | ✅ |
 | M4 Social | profiles, activity, Zune Card, badges | ✅ |
-| M5 QuickMix | similarity recommendations | ✅ (heuristic engine; pgvector later) |
-| M6 Media | PD/CC streaming (after legal review) | ⏳ |
+| M5 QuickMix | similarity recommendations | ✅ (heuristic + embedding blend; pgvector opt-in) |
+| M6 Media | PD/CC streaming (after legal review) | ⏳ model + ingestion shipped behind `Media:Enabled=false`; enablement legal-gated |
 | M7 Legacy Zune compat | `*.zune.net` Atom/XML hosts for hosts-patched clients | ✅ (phases 0–4) |
+| M8 Legacy client enablement | WS-Trust session bridge, hosts/TLS runbook | ✅ |
+| M9 Catalog completeness | artist imagery, podcast hub, empty video hubs | ✅ |
+| M10 Embeddings | similarity store + opt-in pgvector | ✅ |
+| M11 Identity hardening | antiforgery, consent, email verify, password reset | ✅ |
+| M12 Providers & ops | Fanart.tv/TheAudioDB/Discogs, runbooks, dashboard | ✅ |
 
 ## Architecture
 
@@ -223,7 +228,18 @@ See [ADR 0004](docs/adr/0004-legacy-zune-compat-layer.md).
 CABs, `.zcp` packages and PC-client resources stream from a configured,
 untracked corpus root and fail closed (`404`) when unset. `commerce.zune.net`
 purchase and Zune-Pass DRM/license endpoints are **not** implemented (no DRM
-circumvention). The WS-Trust login bridge is disabled by default (`501`).
+circumvention). The WS-Trust login bridge is disabled by default (`501`); once
+enabled it issues a `Compact1` ticket the client re-sends as
+`Authorization: WLID1.0 <ticket>`, resolved to an account by the hash-only
+`LegacySession` store.
+
+Client setup, TLS and corpora are documented in
+[docs/legacy-client-setup.md](docs/legacy-client-setup.md) (with a sample
+reverse proxy in [`deploy/legacy/`](deploy/legacy/) and a smoke script at
+[`tools/legacy-smoke.sh`](tools/legacy-smoke.sh)).
+
+Operations runbooks: [backup/restore](docs/ops/backup-restore.md),
+[metrics](docs/ops/metrics.md), [moderation](docs/ops/moderation.md).
 
 ## Calling the API
 
@@ -276,6 +292,15 @@ expired, and replays once after a `401`. Interactive sign-in stays with the host
 | `Apps:CorpusRoot` | External `.zcp` app corpus for the read-only catalog | _(empty)_ |
 | `Tuners:CorpusRoot` | External PC-client resource corpus; empty ⇒ disabled | _(empty)_ |
 | `Legacy:Login:Enabled` | Enable the gated `login.zune.net` WS-Trust login bridge | `false` |
+| `Legacy:Login:PublicBaseUrl` | Host advertised in `login.zune.net/ppcrlconfig.bin` | `https://login.zune.net` |
+| `Legacy:Session:TtlHours` | Lifetime of an issued legacy session ticket | `720` |
+| `Identity:Security:RequireEmailVerification` | Require a verified email to sign in | `false` |
+| `Identity:Security:PublicBaseUrl` | Base URL for emailed verification/reset links | `http://localhost:5080` |
+| `Media:Enabled` | Enable PD/CC media streaming/ingestion (legal-gated) | `false` |
+| `Media:AllowedLicenses` | Accepted licenses for ingestion | `PD, CC0, CC-BY, CC-BY-SA, …` |
+| `Embedding:Enabled` | Enable embedding ingestion (admin endpoint) | `false` |
+| `Embedding:UsePgvector` | Use the pgvector `<=>` path (see `deploy/pgvector`) | `false` |
+| `Providers:FanartTv:ApiKey` / `:TheAudioDb:ApiKey` / `:Discogs:Token` | Optional artist-image enrichment (empty ⇒ disabled) | _(empty)_ |
 | `Storage:Provider` | `local` or `s3` (MinIO/AWS) | `local` |
 | `Storage:S3:ServiceUrl` / `:Bucket` / `:AccessKey` / `:SecretKey` | S3-compatible endpoint + credentials | _(empty)_ |
 | `Catalog:MusicBrainzRateLimitMs` | Minimum spacing between MusicBrainz calls | `1000` |
