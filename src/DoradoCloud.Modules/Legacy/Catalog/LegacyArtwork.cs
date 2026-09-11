@@ -17,7 +17,7 @@ public sealed class LegacyArtwork(ArtworkService artwork, ILegacyIdMapper ids) :
         {
             return await artwork.GetCoverArtFrontAsync(providerId, width, cancellationToken);
         }
-        catch (ArtworkHostNotAllowedException)
+        catch (Exception ex) when (ex is ArtworkHostNotAllowedException or HttpRequestException)
         {
             return null;
         }

@@ -10,7 +10,8 @@ namespace DoradoCloud.Modules.Legacy.Catalog;
 /// <summary>
 /// MusicBrainz-backed implementation of the legacy catalog feeds. Ids are
 /// emitted as <c>urn:uuid:{mbid}</c> and the incoming ids are normalized by
-/// <see cref="ILegacyIdMapper"/>.
+/// <see cref="ILegacyIdMapper"/>. Provider failures degrade to an empty feed
+/// (or <c>null</c> for a missing entity) rather than a 500.
 /// </summary>
 public sealed class LegacyMusicCatalog(
     MusicBrainzClient catalog,
@@ -30,7 +31,7 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement> GenresAsync(string locale, CancellationToken cancellationToken)
     {
-        var genres = await catalog.ListGenresAsync(cancellationToken);
+        var genres = await TryAsync(() => catalog.ListGenresAsync(cancellationToken)) ?? [];
         var feed = Feed("Genres", "genre", $"/v3.2/{locale}/music/genre").Author("Dorado Cloud");
 
         foreach (var genre in genres)
@@ -51,11 +52,12 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement> GenreAlbumsAsync(string locale, string genreId, CancellationToken cancellationToken)
     {
-        var genres = await catalog.ListGenresAsync(cancellationToken);
+        var genres = await TryAsync(() => catalog.ListGenresAsync(cancellationToken)) ?? [];
         var name = genres.FirstOrDefault(g => GenreId(g) == genreId) ?? genreId.Replace('-', ' ');
 
         var feed = Feed(name, GenreId(name), $"/v3.2/{locale}/music/genre/{genreId}/albums");
-        foreach (var item in await catalog.SearchReleasesByTagAsync(name, 50, cancellationToken))
+        var items = await TryAsync(() => catalog.SearchReleasesByTagAsync(name, 50, cancellationToken)) ?? [];
+        foreach (var item in items)
         {
             AddAlbum(feed, locale, item);
         }
@@ -65,9 +67,9 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement> AlbumSearchAsync(string locale, string query, CancellationToken cancellationToken)
     {
-        var result = await catalog.SearchAsync(query, "release", 25, cancellationToken);
+        var items = (await TryAsync(() => catalog.SearchAsync(query, "release", 25, cancellationToken)))?.Items ?? [];
         var feed = Feed(query, "album", $"/v3.2/{locale}/music/album");
-        foreach (var item in result.Items)
+        foreach (var item in items)
         {
             AddAlbum(feed, locale, item);
         }
@@ -77,7 +79,7 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement?> AlbumDetailAsync(string locale, string albumId, CancellationToken cancellationToken)
     {
-        var release = await catalog.GetReleaseAsync(albumId, cancellationToken);
+        var release = await TryValueAsync(() => catalog.GetReleaseAsync(albumId, cancellationToken));
         if (release is null)
         {
             logger.LogDebug("Legacy album {AlbumId} not found", albumId);
@@ -97,24 +99,24 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement?> ArtistAsync(string locale, string artistId, CancellationToken cancellationToken)
     {
-        var artist = await catalog.GetArtistAsync(artistId, cancellationToken);
+        var artist = await TryValueAsync(() => catalog.GetArtistAsync(artistId, cancellationToken));
         if (artist is null)
         {
             logger.LogDebug("Legacy artist {ArtistId} not found", artistId);
             return null;
         }
 
-        var feed = Feed(artist.Name, LegacyId(artist.Mbid), ArtistHref(locale, artist.Mbid))
+        return Feed(artist.Name, LegacyId(artist.Mbid), ArtistHref(locale, artist.Mbid))
             .Element("sortTitle", artist.SortName)
-            .Element("isVariousArtist", "False");
-
-        return feed.Build();
+            .Element("isVariousArtist", "False")
+            .Build();
     }
 
     public async Task<XElement> ArtistAlbumsAsync(string locale, string artistId, CancellationToken cancellationToken)
     {
         var feed = Feed(artistId, LegacyId(artistId), $"/v3.2/{locale}/music/artist/{artistId}/albums");
-        foreach (var item in await catalog.BrowseReleasesByArtistAsync(artistId, 100, cancellationToken))
+        var items = await TryAsync(() => catalog.BrowseReleasesByArtistAsync(artistId, 100, cancellationToken)) ?? [];
+        foreach (var item in items)
         {
             AddAlbum(feed, locale, item);
         }
@@ -125,8 +127,10 @@ public sealed class LegacyMusicCatalog(
     public async Task<XElement> ArtistTracksAsync(string locale, string artistId, CancellationToken cancellationToken)
     {
         var feed = Feed(artistId, LegacyId(artistId), $"/v3.2/{locale}/music/artist/{artistId}/tracks");
+        var items = await TryAsync(() => catalog.BrowseRecordingsByArtistAsync(artistId, 100, cancellationToken)) ?? [];
+
         var position = 1;
-        foreach (var item in await catalog.BrowseRecordingsByArtistAsync(artistId, 100, cancellationToken))
+        foreach (var item in items)
         {
             AddTrack(feed, locale, item.Mbid, item.Title, artistId, item.Artist, position++, null);
         }
@@ -136,9 +140,9 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement> TrackSearchAsync(string locale, string query, CancellationToken cancellationToken)
     {
-        var result = await catalog.SearchAsync(query, "recording", 25, cancellationToken);
+        var items = (await TryAsync(() => catalog.SearchAsync(query, "recording", 25, cancellationToken)))?.Items ?? [];
         var feed = Feed(query, "track", $"/v3.2/{locale}/music/track");
-        foreach (var item in result.Items)
+        foreach (var item in items)
         {
             AddTrack(feed, locale, item.Mbid, item.Title, string.Empty, item.Artist, 0, null);
         }
@@ -148,7 +152,7 @@ public sealed class LegacyMusicCatalog(
 
     public async Task<XElement?> TrackDetailAsync(string locale, string trackId, CancellationToken cancellationToken)
     {
-        var recording = await catalog.GetRecordingAsync(trackId, cancellationToken);
+        var recording = await TryValueAsync(() => catalog.GetRecordingAsync(trackId, cancellationToken));
         if (recording is null)
         {
             logger.LogDebug("Legacy track {TrackId} not found", trackId);
@@ -177,7 +181,7 @@ public sealed class LegacyMusicCatalog(
     public async Task<XElement> SimilarTracksAsync(string locale, string trackId, CancellationToken cancellationToken)
     {
         var selfHref = $"/v4.0/{locale}/track/{trackId}/similarTracks";
-        var recording = await catalog.GetRecordingAsync(trackId, cancellationToken);
+        var recording = await TryValueAsync(() => catalog.GetRecordingAsync(trackId, cancellationToken));
         var feed = Feed("Similar tracks", "similar", selfHref);
 
         if (recording is null || string.IsNullOrWhiteSpace(recording.ArtistId))
@@ -185,7 +189,8 @@ public sealed class LegacyMusicCatalog(
             return feed.Build();
         }
 
-        foreach (var item in await catalog.BrowseRecordingsByArtistAsync(recording.ArtistId, 25, cancellationToken))
+        var items = await TryAsync(() => catalog.BrowseRecordingsByArtistAsync(recording.ArtistId, 25, cancellationToken)) ?? [];
+        foreach (var item in items)
         {
             if (item.Mbid == recording.Mbid)
             {
@@ -239,6 +244,32 @@ public sealed class LegacyMusicCatalog(
                 entry.Element("trackNumber", position.ToString());
             }
         });
+    }
+
+    /// <summary>Runs a provider call, returning <c>null</c> on a transport/provider error.</summary>
+    private static async Task<T?> TryAsync<T>(Func<Task<T>> action) where T : class
+    {
+        try
+        {
+            return await action();
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Runs an already-nullable provider call, returning <c>null</c> on error.</summary>
+    private static async Task<T?> TryValueAsync<T>(Func<Task<T?>> action) where T : class
+    {
+        try
+        {
+            return await action();
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
     }
 
     private string LegacyId(string providerId)
