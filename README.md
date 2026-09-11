@@ -23,6 +23,7 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 | M4 Social | profiles, activity, Zune Card, badges | ✅ |
 | M5 QuickMix | similarity recommendations | ✅ (heuristic engine; pgvector later) |
 | M6 Media | PD/CC streaming (after legal review) | ⏳ |
+| M7 Legacy Zune compat | `*.zune.net` Atom/XML hosts for hosts-patched clients | ✅ (phases 0–4) |
 
 ## Architecture
 
@@ -48,6 +49,10 @@ DoradoCloud.Api
  ├─ updates         signed app manifests                   (RS256)
  └─ media           PD/CC streaming only                   (gated → M6)
 ```
+
+Alongside the modern JSON API, **legacy Zune compatibility modules** recreate
+the original `*.zune.net` hosts (Atom/XML) at the root, dispatched by the
+request `Host` header (see [`docs/adr/0004`](docs/adr/0004-legacy-zune-compat-layer.md)).
 
 - **Runtime:** .NET 8, ASP.NET Core minimal APIs
 - **Auth:** OpenIddict 5 (authorization code + PKCE, refresh, client credentials)
@@ -194,6 +199,32 @@ It is deterministic, cached and offline-testable. The endpoint contract is stabl
 so a **pgvector embedding** pipeline (ListenBrainz/AcousticBrainz) can replace the
 scoring later without client changes.
 
+## Legacy Zune compatibility (M7)
+
+Hosts-patched Zune 4.8 desktop software and Zune HD devices speak the original
+Atom/XML services to a set of host names. Dorado Cloud recreates them as
+host-routed modules (no `/v1` prefix); each answers only on its declared `Host`.
+See [ADR 0004](docs/adr/0004-legacy-zune-compat-layer.md).
+
+| Host | Service | Backing |
+|---|---|---|
+| `catalog.zune.net` | hubs, genres, albums, artists, tracks, charts, `v4.0` similarTracks, app catalog | MusicBrainz + Cover Art Archive; app packages from an external corpus |
+| `image.catalog.zune.net` | cover art | artwork CDN |
+| `resources.zune.net` | `FirmwareUpdate.xml`, `v4_5/zuneprod.xml`, baseline CABs | external firmware corpus |
+| `mix.zune.net` | Mixview similar tracks | shared catalog |
+| `socialapi.zune.net` | members, friends, badges | social graph |
+| `inbox.zune.net` | messaging | `InboxMessage` store |
+| `tiles.zune.net` | member backgrounds/avatars (read-only) | external tile corpus |
+| `tuners.zune.net` | PC-client resources | external corpus |
+| `login.zune.net` | WS-Trust `RST2.srf` login | account store, **gated** |
+| `fai.music.metaservices.microsoft.com` | `ZuneAPI/EndPoints.aspx` | discovery document |
+
+**Legal posture.** No Microsoft firmware, artwork or packages are committed:
+CABs, `.zcp` packages and PC-client resources stream from a configured,
+untracked corpus root and fail closed (`404`) when unset. `commerce.zune.net`
+purchase and Zune-Pass DRM/license endpoints are **not** implemented (no DRM
+circumvention). The WS-Trust login bridge is disabled by default (`501`).
+
 ## Calling the API
 
 ```bash
@@ -239,6 +270,12 @@ expired, and replays once after a `401`. Interactive sign-in stays with the host
 | `Directory:CacheSeconds` | TTL for cached directory responses | `300` |
 | `Directory:PodcastIndex:ApiKey` / `:ApiSecret` | Podcast Index credentials (empty ⇒ directory degrades to empty) | _(empty)_ |
 | `Directory:RadioBrowser:Enabled` | Enable the Radio-Browser adapter | `true` |
+| `Resources:CorpusRoot` | External firmware baseline CAB directory (empty ⇒ `resources.zune.net` disabled) | _(empty)_ |
+| `Resources:PublicBaseUrl` | Base URL used for CAB links in the firmware manifest | `http://resources.zune.net` |
+| `Tiles:CorpusRoot` | External tile corpus (`Background/`, `Avatar/`); empty ⇒ disabled | _(empty)_ |
+| `Apps:CorpusRoot` | External `.zcp` app corpus for the read-only catalog | _(empty)_ |
+| `Tuners:CorpusRoot` | External PC-client resource corpus; empty ⇒ disabled | _(empty)_ |
+| `Legacy:Login:Enabled` | Enable the gated `login.zune.net` WS-Trust login bridge | `false` |
 | `Storage:Provider` | `local` or `s3` (MinIO/AWS) | `local` |
 | `Storage:S3:ServiceUrl` / `:Bucket` / `:AccessKey` / `:SecretKey` | S3-compatible endpoint + credentials | _(empty)_ |
 | `Catalog:MusicBrainzRateLimitMs` | Minimum spacing between MusicBrainz calls | `1000` |
@@ -252,6 +289,7 @@ expired, and replays once after a `401`. Interactive sign-in stays with the host
 ```
 src/DoradoCloud.Api        host + module discovery + OpenAPI
 src/DoradoCloud.Modules    modules + Identity (OpenIddict)
+src/DoradoCloud.Legacy     Atom/XML writer + legacy id mapping
 src/DoradoCloud.Gateway    YARP edge proxy
 src/DoradoCloud.Shared     contracts shared by host, modules and SDK
 clients/DoradoCloud.Client typed HTTP client SDK

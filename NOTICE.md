@@ -27,6 +27,16 @@ adapters; the remaining rows are planned (native-provider enrichment or M6).
 | ListenBrainz / AcousticBrainz | open data | recommendations (pgvector upgrade — planned) |
 | Internet Archive / Wikimedia Commons | PD / CC only | DRM-free streaming (M6, legal-gated) |
 
+## Legacy Zune compatibility
+- The legacy `*.zune.net` compatibility hosts serve **metadata** from the same
+  open providers above and **stream** firmware CABs, `.zcp` app packages and
+  PC-client resources only from an operator-supplied, untracked corpus. No
+  Microsoft firmware, packages, fonts or artwork are bundled or committed.
+- `commerce.zune.net` purchase/billing and Zune-Pass DRM or license acquisition
+  are not implemented; no DRM is circumvented and no license server is emulated.
+- The `login.zune.net` WS-Trust bridge is disabled by default and validates
+  against the local account store only.
+
 ## Trademarks
 - Zune, Zegoe, Zune HD and Microsoft are trademarks of Microsoft Corporation.
   Dorado is an independent, non-affiliated homage.
