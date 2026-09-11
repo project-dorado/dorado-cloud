@@ -296,6 +296,8 @@ expired, and replays once after a `401`. Interactive sign-in stays with the host
 | `Legacy:Session:TtlHours` | Lifetime of an issued legacy session ticket | `720` |
 | `Identity:Security:RequireEmailVerification` | Require a verified email to sign in | `false` |
 | `Identity:Security:PublicBaseUrl` | Base URL for emailed verification/reset links | `http://localhost:5080` |
+| `Identity:Security:Email:Provider` | Account email sender: `log` (default) or `smtp` | `log` |
+| `Identity:Security:Email:Smtp:*` | SMTP host/port/STARTTLS/user/password/from/fromName | _(empty)_ |
 | `Media:Enabled` | Enable PD/CC media streaming/ingestion (legal-gated) | `false` |
 | `Media:AllowedLicenses` | Accepted licenses for ingestion | `PD, CC0, CC-BY, CC-BY-SA, …` |
 | `Embedding:Enabled` | Enable embedding ingestion (admin endpoint) | `false` |

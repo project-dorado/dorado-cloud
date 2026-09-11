@@ -50,8 +50,8 @@ public static class IdentityServiceCollectionExtensions
         services.AddScoped<SettingsService>();
         services.AddScoped<ConsentService>();
         services.AddScoped<AccountTokenService>();
-        services.AddSingleton<IEmailSender, LoggingEmailSender>();
         services.Configure<IdentitySecurityOptions>(configuration.GetSection("Identity:Security"));
+        services.AddDoradoEmailSender(configuration);
         services.AddAntiforgery();
         services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 
@@ -148,6 +148,27 @@ public static class IdentityServiceCollectionExtensions
             options.AddPolicy("UpdatesAdmin", Operator);
             options.AddPolicy("Admin", Operator);
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Selects the outbound email sender from <c>Identity:Security:Email</c>:
+    /// <c>smtp</c> when configured, otherwise the logging sender.
+    /// </summary>
+    public static IServiceCollection AddDoradoEmailSender(this IServiceCollection services, IConfiguration configuration)
+    {
+        var email = new EmailOptions();
+        configuration.GetSection("Identity:Security:Email").Bind(email);
+
+        if (email.Provider.Equals("smtp", StringComparison.OrdinalIgnoreCase) && email.Smtp.IsConfigured)
+        {
+            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        }
+        else
+        {
+            services.AddSingleton<IEmailSender, LoggingEmailSender>();
+        }
 
         return services;
     }

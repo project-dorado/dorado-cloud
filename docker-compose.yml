@@ -42,6 +42,14 @@ services:
       Providers__FanartTv__ApiKey: "${FANARTTV_API_KEY:-}"
       Providers__TheAudioDb__ApiKey: "${THEAUDIODB_API_KEY:-}"
       Providers__Discogs__Token: "${DISCOGS_TOKEN:-}"
+      # Account email (log by default; smtp when configured).
+      Identity__Security__Email__Provider: "${EMAIL_PROVIDER:-log}"
+      Identity__Security__Email__Smtp__Host: "${SMTP_HOST:-}"
+      Identity__Security__Email__Smtp__Port: "${SMTP_PORT:-587}"
+      Identity__Security__Email__Smtp__UseStartTls: "${SMTP_USE_STARTTLS:-true}"
+      Identity__Security__Email__Smtp__User: "${SMTP_USER:-}"
+      Identity__Security__Email__Smtp__Password: "${SMTP_PASSWORD:-}"
+      Identity__Security__Email__Smtp__From: "${SMTP_FROM:-no-reply@dorado.local}"
     volumes:
       - "${RESOURCES_CORPUS_HOST:-./corpus}:/corpus:ro"
     ports:
