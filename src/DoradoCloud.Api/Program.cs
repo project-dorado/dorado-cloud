@@ -3,8 +3,10 @@ using DoradoCloud.Modules.Artwork;
 using DoradoCloud.Modules.Catalog;
 using DoradoCloud.Modules.Directory;
 using DoradoCloud.Modules.Identity;
+using DoradoCloud.Modules.Legacy.Apps;
 using DoradoCloud.Modules.Legacy.Catalog;
 using DoradoCloud.Modules.Legacy.Resources;
+using DoradoCloud.Modules.Legacy.Tiles;
 using DoradoCloud.Modules.Recommendations;
 using DoradoCloud.Modules.Social;
 using DoradoCloud.Modules.Storage;
@@ -48,6 +50,8 @@ builder.Services.AddDoradoDirectory(builder.Configuration);
 // are streamed from an external, untracked corpus.
 builder.Services.AddDoradoLegacyResources(builder.Configuration);
 builder.Services.AddDoradoLegacyCatalog();
+builder.Services.AddDoradoLegacyTiles(builder.Configuration);
+builder.Services.AddDoradoLegacyApps(builder.Configuration);
 
 // Object storage (local FS default; S3/MinIO when Storage:Provider=s3), catalog
 // (MusicBrainz + Cover Art Archive) and the artwork CDN.

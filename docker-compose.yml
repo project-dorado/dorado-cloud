@@ -29,6 +29,9 @@ services:
       Otel__Endpoint: "${OTEL_ENDPOINT:-}"
       # Legacy resources.zune.net firmware corpus (external, untracked, read-only).
       Resources__CorpusRoot: "${RESOURCES_CORPUS_ROOT:-}"
+      # Legacy tiles / app-catalog corpora (external, untracked, read-only).
+      Tiles__CorpusRoot: "${RESOURCES_TILES_ROOT:-}"
+      Apps__CorpusRoot: "${RESOURCES_APPS_ROOT:-}"
     volumes:
       - "${RESOURCES_CORPUS_HOST:-./corpus}:/corpus:ro"
     ports:
