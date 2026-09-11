@@ -18,6 +18,11 @@ publish/
 dorado-cloud-auth.db*
 data/
 
+# External firmware/app corpora (never committed; see NOTICE.md)
+corpus/
+*.cab
+*.zcp
+
 # OS
 .DS_Store
 Thumbs.db

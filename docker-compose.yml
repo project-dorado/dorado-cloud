@@ -27,6 +27,10 @@ services:
       Storage__S3__AccessKey: "${MINIO_ROOT_USER:?set MINIO_ROOT_USER}"
       Storage__S3__SecretKey: "${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}"
       Otel__Endpoint: "${OTEL_ENDPOINT:-}"
+      # Legacy resources.zune.net firmware corpus (external, untracked, read-only).
+      Resources__CorpusRoot: "${RESOURCES_CORPUS_ROOT:-}"
+    volumes:
+      - "${RESOURCES_CORPUS_HOST:-./corpus}:/corpus:ro"
     ports:
       - "5080:8080"
     depends_on:
