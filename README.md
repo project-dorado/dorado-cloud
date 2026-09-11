@@ -239,7 +239,8 @@ reverse proxy in [`deploy/legacy/`](deploy/legacy/) and a smoke script at
 [`tools/legacy-smoke.sh`](tools/legacy-smoke.sh)).
 
 Operations runbooks: [backup/restore](docs/ops/backup-restore.md),
-[metrics](docs/ops/metrics.md), [moderation](docs/ops/moderation.md).
+[metrics](docs/ops/metrics.md), [moderation](docs/ops/moderation.md),
+[email & account lifecycle](docs/ops/email.md).
 
 ## Calling the API
 
