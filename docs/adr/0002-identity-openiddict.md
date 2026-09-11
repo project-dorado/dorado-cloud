@@ -21,14 +21,19 @@ Core persistence and local token validation.
 - Tokens are validated locally (`UseLocalServer()`); other modules call
   `.RequireAuthorization()`.
 
-M0 auto-approves the authorize endpoint (demo principal) so the flow is
-end-to-end testable; **M1 replaces this with a real login/consent screen** and
-moves the dev certificates to real signing/encryption keys.
+The authorize endpoint now requires an authenticated cookie session and
+**challenges to the real `/account/login` page** (M1); development certificates
+were replaced by persisted signing/encryption keys in M1. The **consent screen
+remains pending** (the seeded public clients still use implicit consent).
 
 ## Consequences
 
 - Standards-based auth interoperates with desktop and Android libraries.
 - No dependency on an external IdP; self-hosters run a complete stack.
-- M0 simplifies trust (auto-approval, development certificates) and MUST be
-  hardened before any public instance: real login, persisted keys, consent,
-  account lifecycle (GDPR export/delete).
+- **Hardened in M1:** real login/register/logout, persisted signing/encryption
+  keys, device registry, versioned settings sync, and GDPR export + erasure.
+- **Hardened in the identity pass:** per-IP auth rate limiting, a fail-closed
+  admin policy outside development, a CORS allowlist, and a development-only
+  smoke client.
+- **Still required before a public instance:** a consent screen, CSRF/antiforgery
+  on the HTML forms, email verification, and password reset.

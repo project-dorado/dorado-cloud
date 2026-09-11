@@ -15,7 +15,12 @@ services:
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=doradocloud;Username=dorado;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       Redis__Configuration: "redis:6379"
       Auth__Issuer: "${AUTH_ISSUER:-http://localhost:5088/}"
+      # Local HTTP convenience: TLS enforcement is relaxed by default here, so
+      # this file uses Production only for build/bundling. Set AUTH_DISABLE_TLS=false
+      # (and a real https issuer) for any public deployment.
       Auth__DisableTransportSecurity: "${AUTH_DISABLE_TLS:-true}"
+      Cors__AllowedOrigins: "${CORS_ALLOWED_ORIGINS:-}"
+      Auth__RateLimit__PermitPerMinute: "${AUTH_RATE_LIMIT_PER_MINUTE:-60}"
       Storage__Provider: "s3"
       Storage__S3__ServiceUrl: "http://minio:9000"
       Storage__S3__Bucket: "${MINIO_BUCKET:-dorado-cloud}"

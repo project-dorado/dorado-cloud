@@ -67,6 +67,12 @@ dotnet run --project src/DoradoCloud.Api       # http://localhost:5080
 SQLite is used by default; Swagger UI is at http://localhost:5080/swagger.
 Discovery is published at `/.well-known/openid-configuration`.
 
+> **Schema.** With PostgreSQL the host applies EF Core **migrations** at startup
+> (`src/DoradoCloud.Modules/Data/Migrations`, including the OpenIddict tables);
+> local development uses SQLite with `EnsureCreated`. Author migrations with the
+> repo-local tool: `dotnet tool restore`, then
+> `dotnet ef migrations add <Name> --project src/DoradoCloud.Modules --startup-project src/DoradoCloud.Api`.
+
 ### Self-host the full stack
 
 ```bash
@@ -176,7 +182,7 @@ distributed cache (Redis in the compose stack, in-process otherwise).
 
 ## QuickMix (M5)
 
-`GET /v1/recs/quickmix?seed=&limit=` turns an artist name **or** MBID into scored,
+`GET /v1/recs/quickmix?seed=&limit=` (and `POST /v1/recs/quickmix`) turns an artist name **or** MBID into scored,
 explained recommendations. The pragmatic engine:
 
 1. resolves the seed (MusicBrainz search when a name is given),
@@ -227,7 +233,9 @@ expired, and replays once after a `401`. Interactive sign-in stays with the host
 | `Auth:UseDevelopmentCertificates` | Use ephemeral dev certificates instead of persisted keys | `false` (`true` in Development) |
 | `Auth:Certificates:Path` / `:Password` | Directory for `openiddict-signing.pfx` / `openiddict-encryption.pfx` | `data/keys` |
 | `Updates:SigningKeyPath` | RSA PKCS#8 PEM used to sign update manifests | `data/keys/updates-signing.pem` |
-| `Updates:Admins` | Subjects/emails allowed to publish releases (empty ⇒ any authenticated) | `[]` |
+| `Auth:RateLimit:PermitPerMinute` | Auth endpoint rate limit (per IP) on `/connect/token`, `/account/login`, `/account/register` | `60` |
+| `Cors:AllowedOrigins` | Browser CORS allowlist (empty ⇒ permissive in Development, same-origin otherwise) | `[]` |
+| `Updates:Admins` | Subjects/emails allowed to publish releases (empty ⇒ no admin rights outside Development) | `[]` |
 | `Directory:CacheSeconds` | TTL for cached directory responses | `300` |
 | `Directory:PodcastIndex:ApiKey` / `:ApiSecret` | Podcast Index credentials (empty ⇒ directory degrades to empty) | _(empty)_ |
 | `Directory:RadioBrowser:Enabled` | Enable the Radio-Browser adapter | `true` |
@@ -235,9 +243,8 @@ expired, and replays once after a `401`. Interactive sign-in stays with the host
 | `Storage:S3:ServiceUrl` / `:Bucket` / `:AccessKey` / `:SecretKey` | S3-compatible endpoint + credentials | _(empty)_ |
 | `Catalog:MusicBrainzRateLimitMs` | Minimum spacing between MusicBrainz calls | `1000` |
 | `Artwork:AllowedHosts` | Hosts the artwork proxy may fetch (SSRF guard) | provider allowlist |
-| `Admin:Subjects` | Subjects/emails allowed to moderate + publish (empty ⇒ any authenticated) | `[]` |
+| `Admin:Subjects` | Subjects/emails allowed to moderate + publish (empty ⇒ no admin rights outside Development) | `[]` |
 | `Redis:Configuration` | StackExchange.Redis connection | _(empty)_ |
-| `Storage:S3:*` | S3/MinIO endpoint, bucket, credentials | _(empty)_ |
 | `Otel:Endpoint` | OTLP collector endpoint (enables tracing/metrics) | _(empty)_ |
 
 ## Repository layout
@@ -249,7 +256,7 @@ src/DoradoCloud.Gateway    YARP edge proxy
 src/DoradoCloud.Shared     contracts shared by host, modules and SDK
 clients/DoradoCloud.Client typed HTTP client SDK
 tests/DoradoCloud.Tests    integration tests (WebApplicationFactory)
-deploy/compose + helm      self-host & official-instance deployment
+docker-compose.yml + deploy/helm   self-host & official-instance deployment
 docs/adr                   architecture decision records
 ```
 
