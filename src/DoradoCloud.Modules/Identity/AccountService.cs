@@ -81,6 +81,38 @@ public sealed class AccountService(
         return account;
     }
 
+    /// <summary>Sets a new password (password reset). Returns false for a weak password or missing account.</summary>
+    public async Task<bool> SetPasswordAsync(Guid accountId, string password, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+        {
+            return false;
+        }
+
+        var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
+        if (account is null)
+        {
+            return false;
+        }
+
+        account.PasswordHash = hasher.HashPassword(account, password);
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>Marks an account's email as verified.</summary>
+    public async Task MarkEmailVerifiedAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
+        if (account is null)
+        {
+            return;
+        }
+
+        account.EmailVerified = true;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>Assembles a machine-readable export of everything stored for an account (GDPR portability).</summary>
     public async Task<object> ExportAsync(Guid accountId, CancellationToken cancellationToken = default)
     {

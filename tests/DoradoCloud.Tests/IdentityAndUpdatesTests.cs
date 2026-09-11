@@ -28,7 +28,8 @@ public sealed class IdentityAndUpdatesTests(CloudApiFactory factory) : IClassFix
         {
             ["email"] = email,
             ["password"] = password,
-            ["displayName"] = "Test User"
+            ["displayName"] = "Test User",
+            ["__RequestVerificationToken"] = await AuthTestHelper.AntiforgeryTokenAsync(client, "/account/register")
         });
 
         var response = await client.PostAsync("/account/register", form);
@@ -60,45 +61,9 @@ public sealed class IdentityAndUpdatesTests(CloudApiFactory factory) : IClassFix
     public async Task Authorization_code_flow_signs_a_user_in()
     {
         var email = NewEmail();
-        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        await RegisterAndSignInAsync(client, email);
 
-        var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
-        var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-
-        var authorizeUrl = QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
-        {
-            ["client_id"] = "dorado-desktop",
-            ["response_type"] = "code",
-            ["scope"] = "openid profile email dorado.api offline_access",
-            ["redirect_uri"] = DesktopRedirect,
-            ["code_challenge"] = challenge,
-            ["code_challenge_method"] = "S256",
-            ["state"] = "state-123"
-        });
-
-        var authorize = await client.GetAsync(authorizeUrl);
-        Assert.Equal(HttpStatusCode.Found, authorize.StatusCode);
-
-        var location = authorize.Headers.Location!;
-        var code = QueryHelpers.ParseQuery(location.Query)["code"].ToString();
-        Assert.False(string.IsNullOrWhiteSpace(code));
-
-        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code",
-            ["client_id"] = "dorado-desktop",
-            ["code"] = code,
-            ["redirect_uri"] = DesktopRedirect,
-            ["code_verifier"] = verifier
-        });
-
-        var token = await client.PostAsync("/connect/token", tokenForm);
-        token.EnsureSuccessStatusCode();
-
-        var tokenJson = await token.Content.ReadFromJsonAsync<JsonElement>();
-        var accessToken = tokenJson.GetProperty("access_token").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(accessToken));
+        // Exercises register + antiforgery + consent + authorization-code + PKCE.
+        var accessToken = await AuthTestHelper.AccessTokenAsync(factory, email);
 
         using var authed = factory.CreateClient();
         authed.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -216,39 +181,5 @@ public sealed class IdentityAndUpdatesTests(CloudApiFactory factory) : IClassFix
     }
 
     private async Task<string> AccessTokenForNewUserAsync()
-    {
-        var email = NewEmail();
-        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        await RegisterAndSignInAsync(client, email);
-
-        var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
-        var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-
-        var authorizeUrl = QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
-        {
-            ["client_id"] = "dorado-desktop",
-            ["response_type"] = "code",
-            ["scope"] = "openid profile email dorado.api offline_access",
-            ["redirect_uri"] = DesktopRedirect,
-            ["code_challenge"] = challenge,
-            ["code_challenge_method"] = "S256"
-        });
-
-        var authorize = await client.GetAsync(authorizeUrl);
-        var code = QueryHelpers.ParseQuery(authorize.Headers.Location!.Query)["code"].ToString();
-
-        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code",
-            ["client_id"] = "dorado-desktop",
-            ["code"] = code,
-            ["redirect_uri"] = DesktopRedirect,
-            ["code_verifier"] = verifier
-        });
-
-        var token = await client.PostAsync("/connect/token", tokenForm);
-        token.EnsureSuccessStatusCode();
-        var json = await token.Content.ReadFromJsonAsync<JsonElement>();
-        return json.GetProperty("access_token").GetString()!;
-    }
+        => await AuthTestHelper.AccessTokenAsync(factory, NewEmail());
 }

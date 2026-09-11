@@ -23,6 +23,8 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
     public DbSet<LegacySession> LegacySessions => Set<LegacySession>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
     public DbSet<TrackEmbedding> TrackEmbeddings => Set<TrackEmbedding>();
+    public DbSet<ConsentGrant> ConsentGrants => Set<ConsentGrant>();
+    public DbSet<AccountToken> AccountTokens => Set<AccountToken>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -143,6 +145,22 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
             entity.Property(e => e.Mbid).HasMaxLength(64).IsRequired();
             entity.Property(e => e.Title).HasMaxLength(256);
             entity.Property(e => e.EmbeddingJson).IsRequired();
+        });
+
+        builder.Entity<ConsentGrant>(entity =>
+        {
+            entity.HasKey(c => new { c.AccountId, c.ClientId });
+            entity.Property(c => c.ClientId).HasMaxLength(100).IsRequired();
+            entity.Property(c => c.Scopes).HasMaxLength(512).IsRequired();
+        });
+
+        builder.Entity<AccountToken>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => new { t.AccountId, t.Purpose });
+            entity.Property(t => t.Purpose).HasMaxLength(32).IsRequired();
+            entity.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
         });
     }
 

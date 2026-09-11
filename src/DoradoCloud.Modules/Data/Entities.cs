@@ -11,6 +11,7 @@ public sealed class Account
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastLoginAt { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool EmailVerified { get; set; }
 }
 
 /// <summary>A client device enrolled by an account (desktop or Android).</summary>
@@ -172,4 +173,27 @@ public sealed class TrackEmbedding
     public string EmbeddingJson { get; set; } = string.Empty;
     public int Dimensions { get; set; }
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A recorded OIDC consent grant (account + client + scopes).</summary>
+public sealed class ConsentGrant
+{
+    public Guid AccountId { get; set; }
+    public string ClientId { get; set; } = string.Empty;
+
+    /// <summary>Space-delimited, sorted scope list.</summary>
+    public string Scopes { get; set; } = string.Empty;
+    public DateTimeOffset GrantedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A single-use, hashed account token (email verification / password reset).</summary>
+public sealed class AccountToken
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AccountId { get; set; }
+    public string Purpose { get; set; } = string.Empty;
+    public string TokenHash { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? ConsumedAt { get; set; }
 }

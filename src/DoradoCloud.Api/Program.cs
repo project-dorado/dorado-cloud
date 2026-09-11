@@ -158,6 +158,9 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Antiforgery for the interactive account forms (login/register/consent/reset).
+app.UseAntiforgery();
+
 // Legacy Zune clients authenticate with a WS-Trust ticket in the
 // `Authorization: WLID1.0 <ticket>` header; resolve it to an account.
 app.UseLegacyZuneSessions();

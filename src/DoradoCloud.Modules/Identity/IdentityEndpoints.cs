@@ -2,20 +2,23 @@ using System.Security.Claims;
 using DoradoCloud.Modules.Data;
 using DoradoCloud.Shared;
 using Microsoft.AspNetCore;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 
 namespace DoradoCloud.Modules.Identity;
 
 /// <summary>
-/// Interactive account endpoints (register / login / logout), plus the OpenID
-/// Connect authorization and token passthroughs.
+/// Interactive account endpoints (register / login / logout / consent / email
+/// verification / password reset), plus the OpenID Connect authorization and
+/// token passthroughs. All HTML POST forms are antiforgery-protected.
 /// </summary>
 public static class IdentityEndpoints
 {
@@ -31,79 +34,173 @@ public static class IdentityEndpoints
 
     private static void MapAccountEndpoints(IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/account/login", (string? returnUrl) => Results.Content(Page(
-            "sign in",
-            $"""
-             <form method="post" action="/account/login">
-               <input type="hidden" name="returnUrl" value="{Html(returnUrl ?? string.Empty)}" />
-               <label>email<input type="email" name="email" autocomplete="username" required /></label>
-               <label>password<input type="password" name="password" autocomplete="current-password" required /></label>
-               <button type="submit">sign in</button>
-             </form>
-             <p><a href="/account/register">create an account</a></p>
-             """, null))).WithName("login_page");
+        endpoints.MapGet("/account/login", (HttpContext context, IAntiforgery antiforgery, string? returnUrl) =>
+            Page("sign in", LoginForm(context, antiforgery, returnUrl))).WithName("login_page");
 
-        endpoints.MapPost("/account/login", async (HttpContext context, AccountService accounts) =>
+        endpoints.MapPost("/account/login", async (
+            HttpContext context, AccountService accounts, IAntiforgery antiforgery) =>
         {
             var form = await context.Request.ReadFormAsync();
-            var returnUrl = form["returnUrl"].ToString();
-            var account = await accounts.ValidateCredentialsAsync(form["email"].ToString(), form["password"].ToString());
+            var returnUrl = SafeLocalUrl(form["returnUrl"].ToString());
 
+            if (!await ValidAntiforgeryAsync(context, antiforgery))
+            {
+                return BadRequest("sign in", LoginForm(context, antiforgery, returnUrl), "invalid request");
+            }
+
+            var account = await accounts.ValidateCredentialsAsync(form["email"].ToString(), form["password"].ToString());
             if (account is null)
             {
-                return Results.Content(Page(
-                    "sign in",
-                    $"""
-                     <form method="post" action="/account/login">
-                       <input type="hidden" name="returnUrl" value="{Html(returnUrl)}" />
-                       <label>email<input type="email" name="email" required /></label>
-                       <label>password<input type="password" name="password" required /></label>
-                       <button type="submit">sign in</button>
-                     </form>
-                     """,
-                    "invalid email or password"), "text/html", statusCode: 401);
+                return Results.Content(
+                    Render("sign in", LoginForm(context, antiforgery, returnUrl), "invalid email or password"),
+                    "text/html", statusCode: 401);
             }
 
             await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, BuildPrincipal(account));
-            return Results.Redirect(string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl);
+            return Results.Redirect(returnUrl);
         }).WithName("login_submit");
 
-        endpoints.MapGet("/account/register", () => Results.Content(Page(
-            "create account",
-            """
-            <form method="post" action="/account/register">
-              <label>display name<input type="text" name="displayName" autocomplete="nickname" /></label>
-              <label>email<input type="email" name="email" autocomplete="username" required /></label>
-              <label>password<input type="password" name="password" autocomplete="new-password" minlength="8" required /></label>
-              <button type="submit">create account</button>
-            </form>
-            <p><a href="/account/login">already have an account?</a></p>
-            """, null))).WithName("register_page");
+        endpoints.MapGet("/account/register", (HttpContext context, IAntiforgery antiforgery) =>
+            Page("create account", RegisterForm(context, antiforgery))).WithName("register_page");
 
-        endpoints.MapPost("/account/register", async (HttpContext context, AccountService accounts) =>
+        endpoints.MapPost("/account/register", async (
+            HttpContext context,
+            AccountService accounts,
+            AccountTokenService tokens,
+            IEmailSender email,
+            IOptions<IdentitySecurityOptions> security,
+            IAntiforgery antiforgery,
+            CancellationToken cancellationToken) =>
         {
+            if (!await ValidAntiforgeryAsync(context, antiforgery))
+            {
+                return BadRequest("create account", RegisterForm(context, antiforgery), "invalid request");
+            }
+
             var form = await context.Request.ReadFormAsync();
             var (account, error) = await accounts.RegisterAsync(
                 form["email"].ToString(), form["password"].ToString(), form["displayName"].ToString());
 
             if (account is null)
             {
-                return Results.Content(Page(
-                    "create account",
-                    $"""
-                     <form method="post" action="/account/register">
-                       <label>display name<input type="text" name="displayName" /></label>
-                       <label>email<input type="email" name="email" required /></label>
-                       <label>password<input type="password" name="password" minlength="8" required /></label>
-                       <button type="submit">create account</button>
-                     </form>
-                     """,
-                    error), "text/html", statusCode: 400);
+                return BadRequest("create account", RegisterForm(context, antiforgery), error);
             }
 
+            await SendVerificationEmailAsync(account, tokens, email, security.Value, cancellationToken);
             await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, BuildPrincipal(account));
             return Results.Redirect("/");
         }).WithName("register_submit");
+
+        endpoints.MapGet("/account/verify-email", async (
+            string? token, AccountTokenService tokens, AccountService accounts, CancellationToken cancellationToken) =>
+        {
+            var accountId = await tokens.ConsumeAsync(token, AccountTokenService.PurposeEmailVerification, cancellationToken);
+            if (accountId is null)
+            {
+                return Results.Content(
+                    Render("verify email", "<p class=\"err\">This verification link is invalid or has expired.</p>", null),
+                    "text/html", statusCode: 400);
+            }
+
+            await accounts.MarkEmailVerifiedAsync(accountId.Value, cancellationToken);
+            return Page("verify email", "<p>Your email is verified. You can close this page and return to the app.</p>");
+        }).WithName("verify_email");
+
+        endpoints.MapGet("/account/forgot-password", (HttpContext context, IAntiforgery antiforgery) =>
+            Page("reset password", ForgotPasswordForm(context, antiforgery))).WithName("forgot_password_page");
+
+        endpoints.MapPost("/account/forgot-password", async (
+            HttpContext context,
+            AccountService accounts,
+            AccountTokenService tokens,
+            IEmailSender email,
+            IOptions<IdentitySecurityOptions> security,
+            IAntiforgery antiforgery,
+            CancellationToken cancellationToken) =>
+        {
+            if (!await ValidAntiforgeryAsync(context, antiforgery))
+            {
+                return BadRequest("reset password", ForgotPasswordForm(context, antiforgery), "invalid request");
+            }
+
+            var form = await context.Request.ReadFormAsync();
+            var account = await accounts.FindByEmailAsync(form["email"].ToString(), cancellationToken);
+            if (account is not null)
+            {
+                var token = await tokens.IssueAsync(
+                    account.Id, AccountTokenService.PurposePasswordReset,
+                    TimeSpan.FromHours(security.Value.PasswordResetTtlHours), cancellationToken);
+                var link = $"{security.Value.PublicBaseUrl.TrimEnd('/')}/account/reset-password?token={Uri.EscapeDataString(token)}";
+                await email.SendAsync(
+                    account.Email,
+                    "Reset your Dorado Cloud password",
+                    $"<p>Use this link to reset your password: <a href=\"{link}\">{link}</a></p>",
+                    cancellationToken);
+            }
+
+            // Never reveal whether the account exists.
+            return Page("reset password", "<p>If that account exists, a reset link has been sent.</p>");
+        }).WithName("forgot_password_submit");
+
+        endpoints.MapGet("/account/reset-password", (HttpContext context, IAntiforgery antiforgery, string? token) =>
+            Page("reset password", ResetPasswordForm(context, antiforgery, token ?? string.Empty))).WithName("reset_password_page");
+
+        endpoints.MapPost("/account/reset-password", async (
+            HttpContext context, AccountService accounts, AccountTokenService tokens, IAntiforgery antiforgery,
+            CancellationToken cancellationToken) =>
+        {
+            if (!await ValidAntiforgeryAsync(context, antiforgery))
+            {
+                return BadRequest("reset password", ResetPasswordForm(context, antiforgery, string.Empty), "invalid request");
+            }
+
+            var form = await context.Request.ReadFormAsync();
+            var password = form["password"].ToString();
+            var token = form["token"].ToString();
+
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+            {
+                return BadRequest("reset password", ResetPasswordForm(context, antiforgery, token), "password must be at least 8 characters");
+            }
+
+            var accountId = await tokens.ConsumeAsync(token, AccountTokenService.PurposePasswordReset, cancellationToken);
+            if (accountId is null || !await accounts.SetPasswordAsync(accountId.Value, password, cancellationToken))
+            {
+                return BadRequest("reset password", ResetPasswordForm(context, antiforgery, token), "this reset link is invalid or has expired");
+            }
+
+            return Page("reset password", "<p>Your password has been updated. <a href=\"/account/login\">Sign in</a>.</p>");
+        }).WithName("reset_password_submit");
+
+        endpoints.MapPost("/account/consent", async (
+            HttpContext context, ConsentService consent, IAntiforgery antiforgery, CancellationToken cancellationToken) =>
+        {
+            if (!await ValidAntiforgeryAsync(context, antiforgery))
+            {
+                return BadRequest("authorize", "<p class=\"err\">invalid request</p>", null);
+            }
+
+            var form = await context.Request.ReadFormAsync();
+            var returnUrl = SafeLocalUrl(form["returnUrl"].ToString());
+
+            var cookie = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            if (!cookie.Succeeded || cookie.Principal?.GetAccountId() is not Guid accountId)
+            {
+                return Results.Challenge(
+                    new AuthenticationProperties { RedirectUri = returnUrl },
+                    new[] { CookieAuthenticationDefaults.AuthenticationScheme });
+            }
+
+            if (!string.Equals(form["allow"].ToString(), "true", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Content(
+                    Render("authorize", "<p class=\"err\">Access denied.</p>", null), "text/html", statusCode: 403);
+            }
+
+            var scopes = form["scope"].ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            await consent.GrantAsync(accountId, form["clientId"].ToString(), scopes, cancellationToken);
+            return Results.Redirect(returnUrl);
+        }).WithName("consent_submit");
 
         endpoints.MapPost("/account/logout", async (HttpContext context) =>
         {
@@ -144,7 +241,19 @@ public static class IdentityEndpoints
                 return Results.Forbid();
             }
 
-            var principal = BuildPrincipal(account, request.GetScopes());
+            // Require explicit consent before issuing tokens for these scopes.
+            var consent = context.RequestServices.GetRequiredService<ConsentService>();
+            var scopes = request.GetScopes();
+            var clientId = request.ClientId ?? "unknown";
+
+            if (!await consent.HasConsentAsync(accountId, clientId, scopes, context.RequestAborted))
+            {
+                var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+                var returnUrl = context.Request.Path + context.Request.QueryString;
+                return Page("authorize", ConsentForm(context, antiforgery, clientId, scopes, returnUrl));
+            }
+
+            var principal = BuildPrincipal(account, scopes);
             return Results.SignIn(
                 principal,
                 properties: new AuthenticationProperties(),
@@ -202,6 +311,24 @@ public static class IdentityEndpoints
 
     // ---- helpers ---------------------------------------------------------
 
+    private static async Task SendVerificationEmailAsync(
+        Account account,
+        AccountTokenService tokens,
+        IEmailSender email,
+        IdentitySecurityOptions security,
+        CancellationToken cancellationToken)
+    {
+        var token = await tokens.IssueAsync(
+            account.Id, AccountTokenService.PurposeEmailVerification,
+            TimeSpan.FromHours(security.EmailVerificationTtlHours), cancellationToken);
+        var link = $"{security.PublicBaseUrl.TrimEnd('/')}/account/verify-email?token={Uri.EscapeDataString(token)}";
+        await email.SendAsync(
+            account.Email,
+            "Verify your Dorado Cloud email",
+            $"<p>Confirm your email address: <a href=\"{link}\">{link}</a></p>",
+            cancellationToken);
+    }
+
     private static ClaimsPrincipal BuildPrincipal(Account account, IEnumerable<string>? scopes = null)
     {
         var identity = new ClaimsIdentity(
@@ -223,10 +350,96 @@ public static class IdentityEndpoints
         return new ClaimsPrincipal(identity);
     }
 
+    private static IResult Page(string title, string body)
+        => Results.Content(Render(title, body, null), "text/html");
+
+    private static IResult BadRequest(string title, string body, string? error)
+        => Results.Content(Render(title, body, error), "text/html", statusCode: 400);
+
+    private static async Task<bool> ValidAntiforgeryAsync(HttpContext context, IAntiforgery antiforgery)
+    {
+        try
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return true;
+        }
+        catch (AntiforgeryValidationException)
+        {
+            return false;
+        }
+    }
+
+    private static string Field(HttpContext context, IAntiforgery antiforgery)
+        => $"<input type=\"hidden\" name=\"__RequestVerificationToken\" value=\"{Html(antiforgery.GetAndStoreTokens(context).RequestToken!)}\" />";
+
+    private static string LoginForm(HttpContext context, IAntiforgery antiforgery, string? returnUrl) => $"""
+        <form method="post" action="/account/login">
+          {Field(context, antiforgery)}
+          <input type="hidden" name="returnUrl" value="{Html(returnUrl ?? string.Empty)}" />
+          <label>email<input type="email" name="email" autocomplete="username" required /></label>
+          <label>password<input type="password" name="password" autocomplete="current-password" required /></label>
+          <button type="submit">sign in</button>
+        </form>
+        <p><a href="/account/register">create an account</a> · <a href="/account/forgot-password">forgot password?</a></p>
+        """;
+
+    private static string RegisterForm(HttpContext context, IAntiforgery antiforgery) => $"""
+        <form method="post" action="/account/register">
+          {Field(context, antiforgery)}
+          <label>display name<input type="text" name="displayName" autocomplete="nickname" /></label>
+          <label>email<input type="email" name="email" autocomplete="username" required /></label>
+          <label>password<input type="password" name="password" autocomplete="new-password" minlength="8" required /></label>
+          <button type="submit">create account</button>
+        </form>
+        <p><a href="/account/login">already have an account?</a></p>
+        """;
+
+    private static string ForgotPasswordForm(HttpContext context, IAntiforgery antiforgery) => $"""
+        <form method="post" action="/account/forgot-password">
+          {Field(context, antiforgery)}
+          <label>email<input type="email" name="email" autocomplete="username" required /></label>
+          <button type="submit">send reset link</button>
+        </form>
+        """;
+
+    private static string ResetPasswordForm(HttpContext context, IAntiforgery antiforgery, string token) => $"""
+        <form method="post" action="/account/reset-password">
+          {Field(context, antiforgery)}
+          <input type="hidden" name="token" value="{Html(token)}" />
+          <label>new password<input type="password" name="password" autocomplete="new-password" minlength="8" required /></label>
+          <button type="submit">set new password</button>
+        </form>
+        """;
+
+    private static string ConsentForm(
+        HttpContext context,
+        IAntiforgery antiforgery,
+        string clientId,
+        IEnumerable<string> scopes,
+        string returnUrl)
+    {
+        var scopeList = string.Join(' ', scopes);
+        return $"""
+        <p><strong>{Html(clientId)}</strong> is requesting access to: {Html(string.Join(", ", scopes))}</p>
+        <form method="post" action="/account/consent">
+          {Field(context, antiforgery)}
+          <input type="hidden" name="returnUrl" value="{Html(returnUrl)}" />
+          <input type="hidden" name="clientId" value="{Html(clientId)}" />
+          <input type="hidden" name="scope" value="{Html(scopeList)}" />
+          <button type="submit" name="allow" value="true">allow</button>
+          <button type="submit" name="allow" value="false">deny</button>
+        </form>
+        """;
+    }
+
+    /// <summary>Only allows same-site relative redirects (prevents open redirects).</summary>
+    private static string SafeLocalUrl(string? url)
+        => !string.IsNullOrWhiteSpace(url) && url.StartsWith('/') && !url.StartsWith("//") ? url : "/";
+
     private static string Html(string value)
         => value.Replace("&", "&amp;").Replace("<", "&lt;").Replace("\"", "&quot;");
 
-    private static string Page(string title, string body, string? error) => $$"""
+    private static string Render(string title, string body, string? error) => $$"""
         <!doctype html>
         <html lang="en">
         <head>

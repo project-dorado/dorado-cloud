@@ -48,6 +48,11 @@ public static class IdentityServiceCollectionExtensions
         services.AddScoped<AccountService>();
         services.AddScoped<DeviceService>();
         services.AddScoped<SettingsService>();
+        services.AddScoped<ConsentService>();
+        services.AddScoped<AccountTokenService>();
+        services.AddSingleton<IEmailSender, LoggingEmailSender>();
+        services.Configure<IdentitySecurityOptions>(configuration.GetSection("Identity:Security"));
+        services.AddAntiforgery();
         services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 
         services.AddOpenIddict()
