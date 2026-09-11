@@ -152,7 +152,18 @@ public static class IdentityServiceCollectionExtensions
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DoradoCloud.Identity");
 
         var db = scope.ServiceProvider.GetRequiredService<DoradoDbContext>();
-        await db.Database.EnsureCreatedAsync();
+        if (db.Database.IsNpgsql())
+        {
+            // Production path: apply versioned EF Core migrations. New tables and
+            // schema evolution are managed by Migrations/ (Postgres).
+            await db.Database.MigrateAsync();
+        }
+        else
+        {
+            // Local/dev path (SQLite): provision the schema directly. SQLite has no
+            // migration history guarantee across provider-specific column types.
+            await db.Database.EnsureCreatedAsync();
+        }
 
         await IdentitySeeder.SeedAsync(scope.ServiceProvider);
         logger.LogInformation("Dorado identity ready (issuer {Issuer}).", app.Configuration["Auth:Issuer"]);

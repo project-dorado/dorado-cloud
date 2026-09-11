@@ -37,7 +37,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ pending
 | **M6 — Media (PD/CC only)** | P1 (legal) | License-gated catalog + streaming from Internet Archive / Wikimedia; requires legal sign-off. No copyrighted media. |
 | **Client integration** | P1 | ✅ SDK centralized auth (`DoradoCloudAuthHandler`, `AddDoradoCloudAuth`); desktop + HD update-check live. Remaining: interactive browser-PKCE E2E; wire any remaining desktop surfaces (`IMixviewService`, `ICloudUpdateService` apply path). |
 | **pgvector QuickMix upgrade** | P2 | Replace heuristic scoring with embeddings (ListenBrainz/AcousticBrainz); endpoint contract already stable. |
-| **EF Core migrations** | P2 | Replace `EnsureCreated` for production schema evolution. |
+| **EF Core migrations** | P2 | ✅ Postgres `InitialCreate` migration (`Data/Migrations`, includes OpenIddict); `MigrateAsync` for Postgres, `EnsureCreated` retained for local SQLite. |
 | **Identity hardening** | P2 | Real consent screen, login rate-limiting, CSRF on HTML forms, account lifecycle (verification, password reset, GDPR export/delete). |
 | **Native providers** | P2 | Discogs / TheAudioDB / Fanart.tv enrichment beyond MusicBrainz + CAA. |
 | **Ops** | P3 | Redis cache tuning, backup/restore runbook, metrics dashboards, moderation ops docs. |
