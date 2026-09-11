@@ -1,0 +1,51 @@
+# Dorado Cloud — legacy Zune TLS reverse proxy (sample)
+#
+# Terminates TLS for the `https://*.zune.net` hosts with a locally-trusted CA
+# (Caddy's `tls internal`) and forwards to the Dorado Cloud gateway, preserving
+# the original Host header so host dispatch works.
+#
+# Usage:
+#   caddy run --config deploy/legacy/Caddyfile
+# Then install Caddy's local root CA on the client machine:
+#   caddy trust
+#
+# Set DORADO_UPSTREAM to the gateway (default gateway:8080 in the compose
+# network, or http://127.0.0.1:5088 when running locally).
+
+{
+	# Trusted local CA instead of Let's Encrypt (this is a LAN/dev setup).
+	local_certs
+}
+
+(legacy) {
+	encode zstd gzip
+	reverse_proxy {$DORADO_UPSTREAM:http://127.0.0.1:5088} {
+		# Preserve the legacy host name for RequireHost dispatch.
+		header_up Host {host}
+	}
+}
+
+# HTTPS hosts the Zune client calls over TLS.
+https://catalog-ssl.zune.net,
+https://image.catalog.zune.net,
+https://mix-ssl.zune.net,
+https://socialapi-ssl.zune.net,
+https://inbox.zune.net,
+https://inbox-ssl.zune.net,
+https://login.zune.net,
+https://login-ssl.zune.net,
+https://metaservices.zune.net {
+	import legacy
+}
+
+# Plain-HTTP hosts can be routed the same way (no TLS needed).
+http://catalog.zune.net,
+http://image.catalog.zune.net,
+http://resources.zune.net,
+http://mix.zune.net,
+http://socialapi.zune.net,
+http://tiles.zune.net,
+http://tuners.zune.net,
+http://fai.music.metaservices.microsoft.com {
+	import legacy
+}
