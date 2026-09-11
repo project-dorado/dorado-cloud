@@ -123,7 +123,9 @@ public static class IdentityServiceCollectionExtensions
                          ?? configuration.GetSection("Updates:Admins").Get<string[]>();
             if (admins is null || admins.Length == 0)
             {
-                return true; // no allowlist configured (single-operator/dev default)
+                // Fail closed outside development: an unconfigured allowlist must not
+                // silently grant moderation/publish rights to every authenticated user.
+                return environment.IsDevelopment();
             }
 
             var email = user.GetEmail();
@@ -165,7 +167,7 @@ public static class IdentityServiceCollectionExtensions
             await db.Database.EnsureCreatedAsync();
         }
 
-        await IdentitySeeder.SeedAsync(scope.ServiceProvider);
+        await IdentitySeeder.SeedAsync(scope.ServiceProvider, includeDevSmokeClient: app.Environment.IsDevelopment());
         logger.LogInformation("Dorado identity ready (issuer {Issuer}).", app.Configuration["Auth:Issuer"]);
     }
 }

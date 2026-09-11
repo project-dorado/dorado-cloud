@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 namespace DoradoCloud.Tests;
@@ -9,7 +10,7 @@ namespace DoradoCloud.Tests;
 /// a temporary update-signing key, so the full auth and release flows are
 /// exercisable without certificates or files leaking between tests.
 /// </summary>
-public sealed class CloudApiFactory : WebApplicationFactory<Program>
+public class CloudApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _dbPath =
         Path.Combine(Path.GetTempPath(), $"dorado-cloud-test-{Guid.NewGuid():N}.db");
@@ -29,6 +30,10 @@ public sealed class CloudApiFactory : WebApplicationFactory<Program>
         // Keep tests off the network: the radio directory is disabled and the
         // podcast directory has no key (both then degrade to empty responses).
         builder.UseSetting("Directory:RadioBrowser:Enabled", "false");
+        // Disable the auth rate limiter for functional tests; RateLimitTests
+        // exercises it with a dedicated low-limit factory.
+        builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+            new Dictionary<string, string?> { ["Auth:RateLimit:PermitPerMinute"] = "100000" }));
     }
 
     protected override void Dispose(bool disposing)

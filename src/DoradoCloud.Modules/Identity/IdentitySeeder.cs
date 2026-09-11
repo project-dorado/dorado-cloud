@@ -7,7 +7,7 @@ namespace DoradoCloud.Modules.Identity;
 /// <summary>Idempotently registers the Dorado OAuth clients and API scope.</summary>
 public static class IdentitySeeder
 {
-    public static async Task SeedAsync(IServiceProvider services)
+    public static async Task SeedAsync(IServiceProvider services, bool includeDevSmokeClient = true)
     {
         var scopeManager = services.GetRequiredService<IOpenIddictScopeManager>();
         if (await scopeManager.FindByNameAsync(DoradoCloudInfo.ApiScope) is null)
@@ -24,7 +24,13 @@ public static class IdentitySeeder
 
         await EnsurePublicClientAsync(appManager, "dorado-desktop", "Dorado Desktop", "http://127.0.0.1:7890/callback");
         await EnsurePublicClientAsync(appManager, "dorado-hd", "Dorado-HD (Android)", "doradohd://callback");
-        await EnsureConfidentialClientAsync(appManager, "dorado-cloud-smoke", "Dorado Cloud Smoke", "dev-secret");
+
+        // The confidential smoke client uses a well-known development secret and
+        // must never be seeded outside development.
+        if (includeDevSmokeClient)
+        {
+            await EnsureConfidentialClientAsync(appManager, "dorado-cloud-smoke", "Dorado Cloud Smoke", "dev-secret");
+        }
     }
 
     private static readonly string[] CommonScopes =

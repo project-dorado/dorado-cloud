@@ -8,7 +8,9 @@ using DoradoCloud.Modules.Social;
 using DoradoCloud.Modules.Storage;
 using DoradoCloud.Modules.Updates;
 using DoradoCloud.Shared;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
+using System.Threading.RateLimiting;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -61,9 +63,49 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// CORS: the official instance is called by desktop/mobile clients from arbitrary origins.
+// CORS: browsers are constrained to a configured allowlist. In development an
+// empty list falls back to permissive; outside development an empty list means
+// no cross-origin access (same-origin only), rather than wide-open.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
-    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+{
+    if (allowedOrigins.Length > 0)
+    {
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+    }
+    else if (builder.Environment.IsDevelopment())
+    {
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+    }
+}));
+
+// Auth endpoints are rate-limited (per client IP) to blunt credential-stuffing
+// and token abuse. A global, path-partitioned limiter is used so the policy does
+// not depend on endpoint metadata or middleware ordering.
+var authPermitPerMinute = builder.Configuration.GetValue("Auth:RateLimit:PermitPerMinute", 60);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        var isAuth = path.EndsWith("/connect/token", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/account/login", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/account/register", StringComparison.OrdinalIgnoreCase);
+        if (!isAuth)
+        {
+            return RateLimitPartition.GetNoLimiter("anonymous");
+        }
+
+        var key = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1),
+            PermitLimit = authPermitPerMinute,
+            QueueLimit = 0,
+        });
+    });
+});
 
 // OpenTelemetry is opt-in: set Otel:Endpoint (OTLP) to export traces/metrics.
 var otlpEndpoint = builder.Configuration["Otel:Endpoint"];
@@ -87,7 +129,9 @@ app.UseSwagger();
 app.UseSwaggerUI(options =>
     options.SwaggerEndpoint($"/swagger/{DoradoCloudInfo.ApiVersion}/swagger.json", "Dorado Cloud API"));
 
+app.UseRouting();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

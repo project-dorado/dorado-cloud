@@ -3,7 +3,7 @@
 Backend services for [Dorado](https://github.com/project-dorado/dorado) (desktop)
 and [Dorado-HD](https://github.com/project-dorado/dorado-hd) (Android).
 
-**Last updated:** 2026-09-10 · **HEAD:** `13fb09f` · **Tests:** 61/61 (44 integration + 17 client) · **Build:** 0 warnings (`/warnaserror`) · **CI:** green (build+test, api & gateway images → ghcr)
+**Last updated:** 2026-09-10 · **HEAD:** `d684597` · **Tests:** 62/62 (45 integration + 17 client) · **Build:** 0 warnings (`/warnaserror`) · **CI:** green (build+test, api & gateway images → ghcr)
 
 Legend: ✅ done · 🚧 in progress · ⏳ pending
 
@@ -38,7 +38,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ pending
 | **Client integration** | P1 | ✅ SDK centralized auth (`DoradoCloudAuthHandler`, `AddDoradoCloudAuth`); desktop + HD update-check live. Remaining: interactive browser-PKCE E2E; wire any remaining desktop surfaces (`IMixviewService`, `ICloudUpdateService` apply path). |
 | **pgvector QuickMix upgrade** | P2 | Replace heuristic scoring with embeddings (ListenBrainz/AcousticBrainz); endpoint contract already stable. |
 | **EF Core migrations** | P2 | ✅ Postgres `InitialCreate` migration (`Data/Migrations`, includes OpenIddict); `MigrateAsync` for Postgres, `EnsureCreated` retained for local SQLite. |
-| **Identity hardening** | P2 | Real consent screen, login rate-limiting, CSRF on HTML forms, account lifecycle (verification, password reset, GDPR export/delete). |
+| **Identity hardening** | P2 | ✅ Auth rate limiting (per-IP, path-partitioned), dev-only smoke client, fail-closed admin policy, CORS allowlist (`Cors:AllowedOrigins`). ⏳ Remaining: consent screen, CSRF/antiforgery on HTML forms, account lifecycle (verification, password reset, GDPR export/delete). |
 | **Native providers** | P2 | Discogs / TheAudioDB / Fanart.tv enrichment beyond MusicBrainz + CAA. |
 | **Ops** | P3 | Redis cache tuning, backup/restore runbook, metrics dashboards, moderation ops docs. |
 
