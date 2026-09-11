@@ -12,7 +12,7 @@ app updates, and DRM-free (public-domain / Creative Commons) streaming.
 > does not contact or emulate Microsoft Zune services and hosts no copyrighted
 > media. See [`NOTICE.md`](NOTICE.md).
 
-## Status — M0 (foundations)
+## Status
 
 | Milestone | Scope | State |
 |---|---|---|
@@ -40,12 +40,12 @@ DoradoCloud.Gateway  (YARP)
         ▼
 DoradoCloud.Api
  ├─ identity        OpenIddict (OIDC) + EF Core accounts
- ├─ catalog         artists / releases / recordings        (stub → M3)
- ├─ artwork         proxy + cache + resize                 (stub → M3)
- ├─ directory       podcasts + radio                       (stub → M2)
- ├─ recs            QuickMix recommendations               (stub → M5)
- ├─ social          profiles / activity / Zune Card        (stub → M4)
- ├─ updates         signed app manifests                   (stub → M1)
+ ├─ catalog         artists / releases / recordings        (MusicBrainz)
+ ├─ artwork         proxy + cache + resize                 (object storage CDN)
+ ├─ directory       podcasts + radio                       (Podcast Index / Radio-Browser)
+ ├─ recs            QuickMix recommendations               (heuristic; pgvector later)
+ ├─ social          profiles / activity / Zune Card        (M4)
+ ├─ updates         signed app manifests                   (RS256)
  └─ media           PD/CC streaming only                   (gated → M6)
 ```
 

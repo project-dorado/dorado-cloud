@@ -3,7 +3,7 @@
 Backend services for [Dorado](https://github.com/project-dorado/dorado) (desktop)
 and [Dorado-HD](https://github.com/project-dorado/dorado-hd) (Android).
 
-**Last updated:** 2026-09-10 · **HEAD:** `176520a` · **Tests:** 44/44 · **Build:** 0 warnings (`/warnaserror`) · **CI:** green (build+test, api & gateway images → ghcr)
+**Last updated:** 2026-09-10 · **HEAD:** `13fb09f` · **Tests:** 55/55 (44 integration + 11 client) · **Build:** 0 warnings (`/warnaserror`) · **CI:** green (build+test, api & gateway images → ghcr)
 
 Legend: ✅ done · 🚧 in progress · ⏳ pending
 
