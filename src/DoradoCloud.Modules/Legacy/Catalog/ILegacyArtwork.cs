@@ -4,10 +4,14 @@ namespace DoradoCloud.Modules.Legacy.Catalog;
 
 /// <summary>
 /// Artwork lookup for the legacy image catalog host, backed by the shared
-/// artwork CDN (Cover Art Archive, cached in object storage).
+/// artwork CDN (Cover Art Archive, cached in object storage) plus a keyless
+/// Wikimedia path for artist imagery.
 /// </summary>
 public interface ILegacyArtwork
 {
     /// <summary>Fetches a front cover by legacy (Zune GUID / MBID) identifier.</summary>
     Task<ArtworkResult?> GetCoverAsync(string id, int width, CancellationToken cancellationToken);
+
+    /// <summary>Fetches an artist image by legacy identifier (best effort).</summary>
+    Task<ArtworkResult?> GetArtistImageAsync(string id, int width, CancellationToken cancellationToken);
 }

@@ -107,6 +107,52 @@ public sealed class MusicBrainzClient(
             .ToList();
     }
 
+    /// <summary>Wikidata Q-id linked from the artist, if any (used for external imagery).</summary>
+    public async Task<string?> GetArtistWikidataIdAsync(string mbid, CancellationToken cancellationToken)
+    {
+        var settings = options.Value;
+        var key = $"cat:artist:wikidata:{mbid}";
+
+        var wikidataId = await cache.GetOrCreateAsync(key, TimeSpan.FromSeconds(settings.CacheSeconds), async token =>
+        {
+            try
+            {
+                var json = await GetJsonAsync(
+                    $"ws/2/artist/{Uri.EscapeDataString(mbid)}?fmt=json&inc=url-rels", token);
+
+                if (!json.TryGetProperty("relations", out var relations) || relations.ValueKind != JsonValueKind.Array)
+                {
+                    return string.Empty;
+                }
+
+                foreach (var relation in relations.EnumerateArray())
+                {
+                    if (!string.Equals(GetString(relation, "type"), "wikidata", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (relation.TryGetProperty("url", out var url)
+                        && url.TryGetProperty("resource", out var resource)
+                        && resource.ValueKind == JsonValueKind.String)
+                    {
+                        var value = resource.GetString() ?? string.Empty;
+                        var slash = value.LastIndexOf('/');
+                        return slash >= 0 ? value[(slash + 1)..] : value;
+                    }
+                }
+
+                return string.Empty;
+            }
+            catch (HttpRequestException)
+            {
+                return string.Empty;
+            }
+        }, cancellationToken);
+
+        return string.IsNullOrWhiteSpace(wikidataId) ? null : wikidataId;
+    }
+
     /// <summary>Artists related to the given artist (band members, collaborators, …).</summary>
     public async Task<IReadOnlyList<CatalogSearchItem>> GetRelatedArtistsAsync(string mbid, CancellationToken cancellationToken)
     {

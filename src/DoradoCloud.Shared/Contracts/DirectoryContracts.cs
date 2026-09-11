@@ -19,6 +19,9 @@ public sealed record PodcastSearchResponse(
     string Attribution,
     IReadOnlyList<PodcastResult> Items);
 
+/// <summary>A Podcast Index category (id + display name).</summary>
+public sealed record PodcastCategory(string Id, string Name);
+
 // ---- Radio directory (Radio-Browser) -----------------------------------
 
 public sealed record RadioStationResult(

@@ -34,38 +34,88 @@ public sealed class PodcastIndexClient(
 
         return await cache.GetOrCreateAsync(key, TimeSpan.FromSeconds(settings.CacheSeconds), async token =>
         {
-            var epoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var signature = Convert.ToHexString(
-                    SHA1.HashData(Encoding.UTF8.GetBytes(
-                        $"{settings.PodcastIndex.ApiKey}{settings.PodcastIndex.ApiSecret}{epoch}")))
-                .ToLowerInvariant();
-
-            using var request = new HttpRequestMessage(
-                HttpMethod.Get, $"api/1.0/search/byterm?q={Uri.EscapeDataString(query)}&max={limit}");
-            request.Headers.Add("X-Auth-Key", settings.PodcastIndex.ApiKey);
-            request.Headers.Add("X-Auth-Date", epoch.ToString());
-            request.Headers.Add("Authorization", signature);
-            request.Headers.UserAgent.ParseAdd(settings.PodcastIndex.UserAgent);
-
+            using var request = SignedRequest(
+                $"api/1.0/search/byterm?q={Uri.EscapeDataString(query)}&max={limit}", settings);
             using var response = await http.SendAsync(request, token);
             response.EnsureSuccessStatusCode();
 
             var payload = await response.Content.ReadFromJsonAsync<PodcastIndexResponse>(token);
-            var items = (payload?.Feeds ?? [])
-                .Select(feed => new PodcastResult(
-                    feed.Id.ToString(),
-                    feed.Title ?? string.Empty,
-                    feed.Author ?? string.Empty,
-                    feed.Description ?? string.Empty,
-                    feed.Image ?? string.Empty,
-                    feed.Url ?? string.Empty,
-                    CategoriesToString(feed.Categories),
-                    feed.Language ?? string.Empty))
-                .ToList();
-
+            var items = (payload?.Feeds ?? []).Select(MapFeed).ToList();
             return new PodcastSearchResponse(query, items.Count, true, DirectoryOptions.AttributionPodcast, items);
         }, cancellationToken);
     }
+
+    /// <summary>Trending podcasts (empty when unconfigured).</summary>
+    public async Task<IReadOnlyList<PodcastResult>> TrendingAsync(int limit, CancellationToken cancellationToken)
+    {
+        var settings = options.Value;
+        if (!settings.PodcastIndex.IsConfigured)
+        {
+            return [];
+        }
+
+        limit = Math.Clamp(limit, 1, 100);
+        var key = $"dir:podcasts:trending:{limit}";
+
+        return await cache.GetOrCreateAsync(key, TimeSpan.FromSeconds(settings.CacheSeconds), async token =>
+        {
+            using var request = SignedRequest($"api/1.0/podcasts/trending?max={limit}", settings);
+            using var response = await http.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadFromJsonAsync<PodcastIndexResponse>(token);
+            return (payload?.Feeds ?? []).Select(MapFeed).ToList();
+        }, cancellationToken);
+    }
+
+    /// <summary>Podcast categories (empty when unconfigured).</summary>
+    public async Task<IReadOnlyList<PodcastCategory>> CategoriesAsync(CancellationToken cancellationToken)
+    {
+        var settings = options.Value;
+        if (!settings.PodcastIndex.IsConfigured)
+        {
+            return [];
+        }
+
+        var key = "dir:podcasts:categories";
+
+        return await cache.GetOrCreateAsync(key, TimeSpan.FromSeconds(settings.CacheSeconds), async token =>
+        {
+            using var request = SignedRequest("api/1.0/categories/list", settings);
+            using var response = await http.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadFromJsonAsync<PodcastCategoriesResponse>(token);
+            return (payload?.Feeds ?? [])
+                .Select(feed => new PodcastCategory(feed.Id.ToString(), feed.Name ?? string.Empty))
+                .ToList();
+        }, cancellationToken);
+    }
+
+    private HttpRequestMessage SignedRequest(string path, DirectoryOptions settings)
+    {
+        var epoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var signature = Convert.ToHexString(
+                SHA1.HashData(Encoding.UTF8.GetBytes(
+                    $"{settings.PodcastIndex.ApiKey}{settings.PodcastIndex.ApiSecret}{epoch}")))
+            .ToLowerInvariant();
+
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add("X-Auth-Key", settings.PodcastIndex.ApiKey);
+        request.Headers.Add("X-Auth-Date", epoch.ToString());
+        request.Headers.Add("Authorization", signature);
+        request.Headers.UserAgent.ParseAdd(settings.PodcastIndex.UserAgent);
+        return request;
+    }
+
+    private static PodcastResult MapFeed(PodcastIndexFeed feed)
+        => new(
+            feed.Id.ToString(),
+            feed.Title ?? string.Empty,
+            feed.Author ?? string.Empty,
+            feed.Description ?? string.Empty,
+            feed.Image ?? string.Empty,
+            feed.Url ?? string.Empty,
+            CategoriesToString(feed.Categories),
+            feed.Language ?? string.Empty);
 
     private static string CategoriesToString(JsonElement? categories)
     {
@@ -95,4 +145,11 @@ public sealed class PodcastIndexClient(
         [property: JsonPropertyName("url")] string? Url,
         [property: JsonPropertyName("categories")] JsonElement? Categories,
         [property: JsonPropertyName("language")] string? Language);
+
+    private sealed record PodcastCategoriesResponse(
+        [property: JsonPropertyName("feeds")] List<PodcastCategoryFeed>? Feeds);
+
+    private sealed record PodcastCategoryFeed(
+        [property: JsonPropertyName("id")] long Id,
+        [property: JsonPropertyName("name")] string? Name);
 }

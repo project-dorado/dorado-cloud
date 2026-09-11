@@ -30,12 +30,14 @@ public sealed class LegacyImageCatalogModule : LegacyModuleBase
                 return result is null ? Results.NotFound() : Serve(result);
             });
 
-        group.MapGet("/v3.2/{locale}/music/artist/{id}/{type}", (string locale, string id, string type) =>
-            Results.NotFound(new
+        group.MapGet("/v3.2/{locale}/music/artist/{id}/{type}",
+            async (string locale, string id, string type, int? width, ILegacyArtwork artwork, CancellationToken ct) =>
             {
-                error = "artist_image_unavailable",
-                detail = "No artist-image provider is configured for the legacy catalog."
-            }));
+                var result = await artwork.GetArtistImageAsync(id, width ?? 500, ct);
+                return result is null
+                    ? Results.NotFound(new { error = "artist_image_unavailable" })
+                    : Serve(result);
+            });
     }
 
     private static IResult Serve(ArtworkResult result) => Results.File(result.Content, result.ContentType);

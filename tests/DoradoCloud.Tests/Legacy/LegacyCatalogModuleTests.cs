@@ -59,6 +59,9 @@ public sealed class LegacyCatalogModuleTests : IClassFixture<LegacyCatalogModule
     {
         public Task<ArtworkResult?> GetCoverAsync(string id, int width, CancellationToken ct)
             => Task.FromResult<ArtworkResult?>(id == "rg-1" ? new ArtworkResult(new byte[] { 1, 2, 3, 4 }, "image/jpeg") : null);
+
+        public Task<ArtworkResult?> GetArtistImageAsync(string id, int width, CancellationToken ct)
+            => Task.FromResult<ArtworkResult?>(id == "artist-1" ? new ArtworkResult(new byte[] { 5, 6, 7 }, "image/jpeg") : null);
     }
 
     private readonly LegacyCatalogFactory _factory;
@@ -115,6 +118,17 @@ public sealed class LegacyCatalogModuleTests : IClassFixture<LegacyCatalogModule
     }
 
     [Fact]
+    public async Task Movie_hub_returns_a_valid_empty_feed()
+    {
+        var client = _factory.CreateClient();
+        using var request = Hosted(CatalogHost, "/v3.2/en-US/music/hub/movie");
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("<a:feed", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Similar_tracks_route_is_available()
     {
         var client = _factory.CreateClient();
@@ -148,10 +162,22 @@ public sealed class LegacyCatalogModuleTests : IClassFixture<LegacyCatalogModule
     }
 
     [Fact]
-    public async Task Artist_image_is_404_without_a_provider()
+    public async Task Artist_image_is_served_when_available()
     {
         var client = _factory.CreateClient();
         using var request = Hosted(ImageHost, "/v3.2/en-US/music/artist/artist-1/primaryImage");
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("image/jpeg", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(new byte[] { 5, 6, 7 }, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task Unknown_artist_image_is_404()
+    {
+        var client = _factory.CreateClient();
+        using var request = Hosted(ImageHost, "/v3.2/en-US/music/artist/unknown-artist/primaryImage");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         var response = await client.SendAsync(request);

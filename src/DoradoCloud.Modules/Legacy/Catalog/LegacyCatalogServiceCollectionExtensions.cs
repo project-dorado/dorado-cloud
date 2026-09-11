@@ -14,7 +14,19 @@ public static class LegacyCatalogServiceCollectionExtensions
     {
         services.AddSingleton<ILegacyIdMapper, LegacyIdMapper>();
         services.AddSingleton<ILegacyMusicCatalog, LegacyMusicCatalog>();
+        services.AddSingleton<ILegacyPodcastCatalog, LegacyPodcastCatalog>();
         services.AddSingleton<ILegacyArtwork, LegacyArtwork>();
+
+        // Keyless artist imagery: Wikidata P18 -> Wikimedia Commons.
+        services.AddHttpClient<WikidataClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://www.wikidata.org/");
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+
+        // SSRF-guarded podcast RSS passthrough.
+        services.AddHttpClient<RssProxyClient>(client => client.Timeout = TimeSpan.FromSeconds(15));
+
         return services;
     }
 }
