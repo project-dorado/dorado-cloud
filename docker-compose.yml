@@ -38,6 +38,10 @@ services:
       Media__Enabled: "${MEDIA_ENABLED:-false}"
       Embedding__Enabled: "${EMBEDDING_ENABLED:-false}"
       Embedding__UsePgvector: "${EMBEDDING_USE_PGVECTOR:-false}"
+      # Optional enrichment providers (keywords empty = disabled).
+      Providers__FanartTv__ApiKey: "${FANARTTV_API_KEY:-}"
+      Providers__TheAudioDb__ApiKey: "${THEAUDIODB_API_KEY:-}"
+      Providers__Discogs__Token: "${DISCOGS_TOKEN:-}"
     volumes:
       - "${RESOURCES_CORPUS_HOST:-./corpus}:/corpus:ro"
     ports:
