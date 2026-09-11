@@ -63,6 +63,22 @@ public sealed class AtomFeedBuilder
         return this;
     }
 
+    /// <summary>Adds a simple local element with a text value to the feed.</summary>
+    public AtomFeedBuilder Element(string name, string value)
+    {
+        _feed.Add(new XElement(_local + name, value));
+        return this;
+    }
+
+    /// <summary>Adds a local element and lets the caller populate its children.</summary>
+    public AtomFeedBuilder Container(string name, Action<XElement> configure)
+    {
+        var element = new XElement(_local + name);
+        configure(element);
+        _feed.Add(element);
+        return this;
+    }
+
     /// <summary>Creates an entry builder bound to this feed's local namespace.</summary>
     public AtomEntryBuilder NewEntry(string title, string id, string? href = null)
         => new(_local, title, id, href);
@@ -83,8 +99,7 @@ public sealed class AtomFeedBuilder
     public XElement Build() => _feed;
 
     /// <summary>Serializes the feed with an XML declaration, no pretty-printing.</summary>
-    public string ToXml()
-        => "<?xml version=\"1.0\" encoding=\"utf-8\"?>" + _feed.ToString(SaveOptions.DisableFormatting);
+    public string ToXml() => LegacyXml.ToXml(_feed);
 
     /// <summary>An Atom <c>a:link</c> element.</summary>
     public static XElement Link(string href, string rel = "self", string type = LegacyConstants.AtomXml)

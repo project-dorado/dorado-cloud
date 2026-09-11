@@ -3,6 +3,7 @@ using DoradoCloud.Modules.Artwork;
 using DoradoCloud.Modules.Catalog;
 using DoradoCloud.Modules.Directory;
 using DoradoCloud.Modules.Identity;
+using DoradoCloud.Modules.Legacy.Catalog;
 using DoradoCloud.Modules.Legacy.Resources;
 using DoradoCloud.Modules.Recommendations;
 using DoradoCloud.Modules.Social;
@@ -46,6 +47,7 @@ builder.Services.AddDoradoDirectory(builder.Configuration);
 // Legacy Zune compatibility services (host-routed, Atom/XML). Firmware CABs
 // are streamed from an external, untracked corpus.
 builder.Services.AddDoradoLegacyResources(builder.Configuration);
+builder.Services.AddDoradoLegacyCatalog();
 
 // Object storage (local FS default; S3/MinIO when Storage:Provider=s3), catalog
 // (MusicBrainz + Cover Art Archive) and the artwork CDN.

@@ -137,6 +137,138 @@ public sealed class MusicBrainzClient(
         return results;
     }
 
+    /// <summary>A release with its track list (used by the legacy album feed).</summary>
+    public async Task<CatalogRelease?> GetReleaseAsync(string mbid, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync(
+            $"ws/2/release/{Uri.EscapeDataString(mbid)}?fmt=json&inc=artists+recordings", cancellationToken);
+
+        if (!json.TryGetProperty("id", out _))
+        {
+            return null;
+        }
+
+        var artist = PrimaryArtist(json);
+        var tracks = new List<CatalogReleaseTrack>();
+
+        if (json.TryGetProperty("media", out var media) && media.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var medium in media.EnumerateArray())
+            {
+                if (!medium.TryGetProperty("tracks", out var trackList) || trackList.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var track in trackList.EnumerateArray())
+                {
+                    if (!track.TryGetProperty("recording", out var recording))
+                    {
+                        continue;
+                    }
+
+                    var trackArtist = PrimaryArtist(recording);
+                    tracks.Add(new CatalogReleaseTrack(
+                        GetString(recording, "id"),
+                        GetString(recording, "title"),
+                        GetInt(track, "position") ?? tracks.Count + 1,
+                        GetLength(recording) ?? GetLength(track),
+                        trackArtist.Id,
+                        trackArtist.Name));
+                }
+            }
+        }
+
+        return new CatalogRelease(
+            GetString(json, "id"),
+            GetString(json, "title"),
+            artist.Id,
+            artist.Name,
+            GetString(json, "date"),
+            tracks);
+    }
+
+    /// <summary>A standalone recording with its primary release (legacy track feed).</summary>
+    public async Task<CatalogRecording?> GetRecordingAsync(string mbid, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync(
+            $"ws/2/recording/{Uri.EscapeDataString(mbid)}?fmt=json&inc=artist-credits+releases", cancellationToken);
+
+        if (!json.TryGetProperty("id", out _))
+        {
+            return null;
+        }
+
+        var artist = PrimaryArtist(json);
+        var albumId = string.Empty;
+        var albumTitle = string.Empty;
+
+        if (json.TryGetProperty("releases", out var releases) && releases.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var release in releases.EnumerateArray())
+            {
+                albumId = GetString(release, "id");
+                albumTitle = GetString(release, "title");
+                break;
+            }
+        }
+
+        return new CatalogRecording(
+            GetString(json, "id"),
+            GetString(json, "title"),
+            artist.Id,
+            artist.Name,
+            albumId,
+            albumTitle,
+            GetLength(json));
+    }
+
+    /// <summary>Releases by an artist (browse).</summary>
+    public async Task<IReadOnlyList<CatalogSearchItem>> BrowseReleasesByArtistAsync(
+        string artistMbid, int limit, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync(
+            $"ws/2/release?artist={Uri.EscapeDataString(artistMbid)}&fmt=json&limit={Math.Clamp(limit, 1, 100)}&inc=artist-credits",
+            cancellationToken);
+        return MapReleases(json, options.Value);
+    }
+
+    /// <summary>Recordings by an artist (browse).</summary>
+    public async Task<IReadOnlyList<CatalogSearchItem>> BrowseRecordingsByArtistAsync(
+        string artistMbid, int limit, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync(
+            $"ws/2/recording?artist={Uri.EscapeDataString(artistMbid)}&fmt=json&limit={Math.Clamp(limit, 1, 100)}&inc=artist-credits",
+            cancellationToken);
+        return MapRecordings(json);
+    }
+
+    /// <summary>Releases tagged with the given genre.</summary>
+    public async Task<IReadOnlyList<CatalogSearchItem>> SearchReleasesByTagAsync(
+        string tag, int limit, CancellationToken cancellationToken)
+    {
+        var query = Uri.EscapeDataString($"tag:\"{tag}\"");
+        var json = await GetJsonAsync(
+            $"ws/2/release/?query={query}&fmt=json&limit={Math.Clamp(limit, 1, 100)}&inc=artist-credits", cancellationToken);
+        return MapReleases(json, options.Value);
+    }
+
+    /// <summary>All MusicBrainz genres (most common first).</summary>
+    public async Task<IReadOnlyList<string>> ListGenresAsync(CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync("ws/2/genre/all?fmt=json&limit=100", cancellationToken);
+
+        if (!json.TryGetProperty("genres", out var genres) || genres.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return genres.EnumerateArray()
+            .Select(genre => GetString(genre, "name"))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
+    }
+
     /// <summary>Artists tagged with the given genre.</summary>
     public async Task<IReadOnlyList<CatalogSearchItem>> SearchByTagAsync(string tag, int limit, CancellationToken cancellationToken)
     {
@@ -239,6 +371,59 @@ public sealed class MusicBrainzClient(
                 ? name.GetString()
                 : string.Empty).Where(n => !string.IsNullOrEmpty(n)));
     }
+
+    private static List<CatalogSearchItem> MapReleases(JsonElement json, CatalogOptions settings)
+    {
+        var items = new List<CatalogSearchItem>();
+        if (!json.TryGetProperty("releases", out var releases) || releases.ValueKind != JsonValueKind.Array)
+        {
+            return items;
+        }
+
+        foreach (var release in releases.EnumerateArray())
+        {
+            var id = GetString(release, "id");
+            items.Add(new CatalogSearchItem(
+                "release",
+                id,
+                GetString(release, "title"),
+                ArtistCredit(release),
+                GetString(release, "date"),
+                string.IsNullOrWhiteSpace(id) ? null : $"{settings.CoverArtBaseUrl.TrimEnd('/')}/release/{id}/front-250"));
+        }
+
+        return items;
+    }
+
+    private static (string Id, string Name) PrimaryArtist(JsonElement element)
+    {
+        if (element.TryGetProperty("artist-credit", out var credits) && credits.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var credit in credits.EnumerateArray())
+            {
+                if (credit.ValueKind == JsonValueKind.Object && credit.TryGetProperty("artist", out var artist))
+                {
+                    return (GetString(artist, "id"), GetString(artist, "name"));
+                }
+            }
+        }
+
+        return (string.Empty, string.Empty);
+    }
+
+    private static int? GetLength(JsonElement element)
+        => element.TryGetProperty("length", out var length)
+           && length.ValueKind == JsonValueKind.Number
+           && length.TryGetInt32(out var milliseconds)
+            ? milliseconds
+            : null;
+
+    private static int? GetInt(JsonElement element, string property)
+        => element.TryGetProperty(property, out var value)
+           && value.ValueKind == JsonValueKind.Number
+           && value.TryGetInt32(out var number)
+            ? number
+            : null;
 
     private static string GetString(JsonElement element, string property)
         => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
