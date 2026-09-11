@@ -202,7 +202,17 @@ The typed SDK lives in [`clients/DoradoCloud.Client`](clients/DoradoCloud.Client
 
 ```csharp
 services.AddDoradoCloud(new Uri("https://cloud.dorado.example/"));
+// Optional: attach bearer tokens and refresh them automatically (OIDC refresh_token).
+services.AddDoradoCloudAuth(
+    new Uri("https://cloud.dorado.example/"),
+    clientId: "dorado-desktop",
+    credentialStoreFactory: sp => sp.GetRequiredService<ICloudCredentialStore>());
 ```
+
+`AddDoradoCloudAuth` installs a `DelegatingHandler` that reads the credential
+from your `ICloudCredentialStore`, attaches the bearer token, refreshes it when
+expired, and replays once after a `401`. Interactive sign-in stays with the host
+(desktop loopback PKCE, Android Custom Tabs); the SDK owns token lifetime.
 
 ## Configuration
 
