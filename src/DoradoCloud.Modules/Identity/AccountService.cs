@@ -1,11 +1,16 @@
 using DoradoCloud.Modules.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using OpenIddict.Abstractions;
 
 namespace DoradoCloud.Modules.Identity;
 
-/// <summary>Account registration and credential validation (PBKDF2 via PasswordHasher).</summary>
-public sealed class AccountService(DoradoDbContext db, IPasswordHasher<Account> hasher)
+/// <summary>Account registration, credential validation, and the GDPR lifecycle (export/delete).</summary>
+public sealed class AccountService(
+    DoradoDbContext db,
+    IPasswordHasher<Account> hasher,
+    IOpenIddictTokenManager tokenManager,
+    IOpenIddictAuthorizationManager authorizationManager)
 {
     public static string Normalize(string email) => email.Trim().ToLowerInvariant();
 
@@ -74,5 +79,81 @@ public sealed class AccountService(DoradoDbContext db, IPasswordHasher<Account> 
         account.LastLoginAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return account;
+    }
+
+    /// <summary>Assembles a machine-readable export of everything stored for an account (GDPR portability).</summary>
+    public async Task<object> ExportAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var account = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
+        var devices = await db.Devices.AsNoTracking().Where(d => d.AccountId == accountId).ToListAsync(cancellationToken);
+        var settings = await db.UserSettings.AsNoTracking().FirstOrDefaultAsync(s => s.AccountId == accountId, cancellationToken);
+        var profile = await db.Profiles.AsNoTracking().FirstOrDefaultAsync(p => p.AccountId == accountId, cancellationToken);
+        var activities = await db.Activities.AsNoTracking().Where(a => a.AccountId == accountId).ToListAsync(cancellationToken);
+        var badges = await db.Badges.AsNoTracking().Where(b => b.AccountId == accountId).ToListAsync(cancellationToken);
+        var follows = await db.Follows.AsNoTracking()
+            .Where(f => f.FollowerAccountId == accountId || f.FolloweeAccountId == accountId)
+            .ToListAsync(cancellationToken);
+
+        return new
+        {
+            exportedAt = DateTimeOffset.UtcNow,
+            account = account is null ? null : new
+            {
+                account.Id,
+                account.Email,
+                account.DisplayName,
+                account.CreatedAt,
+                account.LastLoginAt,
+                account.IsActive,
+            },
+            devices = devices.Select(DeviceService.ToDto).ToList(),
+            settings = settings is null ? null : new { settings.PayloadJson, settings.Version, settings.UpdatedAt },
+            profile = profile is null ? null : new
+            {
+                profile.Handle,
+                profile.DisplayName,
+                profile.Bio,
+                profile.CreatedAt,
+                profile.UpdatedAt,
+            },
+            activities = activities.Select(a => new { a.Id, a.Kind, a.PayloadJson, a.CreatedAt }).ToList(),
+            badges = badges.Select(b => new { b.Code, b.EarnedAt }).ToList(),
+            follows = follows.Select(f => new { f.FollowerAccountId, f.FolloweeAccountId, f.CreatedAt }).ToList(),
+        };
+    }
+
+    /// <summary>Deletes an account and all associated data, revoking its OIDC tokens/authorizations (GDPR erasure).</summary>
+    public async Task<bool> DeleteAccountAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);
+        if (account is null)
+        {
+            return false;
+        }
+
+        // Revoke outstanding tokens/authorizations so refresh tokens stop working.
+        var subject = accountId.ToString();
+        await foreach (var token in tokenManager.FindBySubjectAsync(subject, cancellationToken))
+        {
+            await tokenManager.DeleteAsync(token, cancellationToken);
+        }
+
+        await foreach (var authorization in authorizationManager.FindBySubjectAsync(subject, cancellationToken))
+        {
+            await authorizationManager.DeleteAsync(authorization, cancellationToken);
+        }
+
+        db.Devices.RemoveRange(db.Devices.Where(d => d.AccountId == accountId));
+        db.UserSettings.RemoveRange(db.UserSettings.Where(s => s.AccountId == accountId));
+        db.Profiles.RemoveRange(db.Profiles.Where(p => p.AccountId == accountId));
+        db.Activities.RemoveRange(db.Activities.Where(a => a.AccountId == accountId));
+        db.Badges.RemoveRange(db.Badges.Where(b => b.AccountId == accountId));
+        db.Follows.RemoveRange(db.Follows.Where(f => f.FollowerAccountId == accountId || f.FolloweeAccountId == accountId));
+        db.Blocks.RemoveRange(db.Blocks.Where(b => b.BlockerAccountId == accountId || b.BlockedAccountId == accountId));
+        db.Reports.RemoveRange(db.Reports.Where(r => r.ReporterAccountId == accountId));
+        db.Accounts.Remove(account);
+
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

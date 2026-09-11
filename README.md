@@ -106,6 +106,8 @@ helm install dorado-cloud deploy/helm/dorado-cloud \
 | `GET /v1/identity/me` | bearer | current account/service principal |
 | `GET/POST /v1/identity/me/devices`, `DELETE …/{id}` | bearer (account) | device registry |
 | `GET/PUT /v1/identity/me/settings` | bearer (account) | settings sync (versioned) |
+| `GET /v1/identity/me/export` | bearer (account) | GDPR data-portability export |
+| `DELETE /v1/identity/me` | bearer (account) | GDPR erasure (deletes account + data, revokes tokens) |
 | `GET /v1/updates/{app}/{channel}`, `GET /v1/updates/signing-key` | public | signed update feed + verification key |
 | `POST /v1/updates/publish` | bearer (`UpdatesAdmin`) | publish a signed release |
 

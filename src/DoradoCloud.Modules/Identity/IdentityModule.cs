@@ -98,5 +98,27 @@ public sealed class IdentityModule : EndpointModuleBase
                 ? Results.Conflict(new { error = "version_conflict" })
                 : Results.Ok(dto);
         }).WithName("identity_settings_put");
+
+        // GDPR: data portability export and right-to-erasure.
+        me.MapGet("/export", async (ClaimsPrincipal user, AccountService accounts, CancellationToken cancellationToken) =>
+        {
+            if (user.GetAccountId() is not Guid accountId)
+            {
+                return Results.Forbid();
+            }
+
+            return Results.Ok(await accounts.ExportAsync(accountId, cancellationToken));
+        }).WithName("identity_export");
+
+        me.MapDelete("", async (ClaimsPrincipal user, AccountService accounts, CancellationToken cancellationToken) =>
+        {
+            if (user.GetAccountId() is not Guid accountId)
+            {
+                return Results.Forbid();
+            }
+
+            var deleted = await accounts.DeleteAccountAsync(accountId, cancellationToken);
+            return deleted ? Results.NoContent() : Results.NotFound();
+        }).WithName("identity_delete_account");
     }
 }
