@@ -32,6 +32,8 @@ services:
       # Legacy tiles / app-catalog corpora (external, untracked, read-only).
       Tiles__CorpusRoot: "${RESOURCES_TILES_ROOT:-}"
       Apps__CorpusRoot: "${RESOURCES_APPS_ROOT:-}"
+      Tuners__CorpusRoot: "${RESOURCES_TUNERS_ROOT:-}"
+      Legacy__Login__Enabled: "${LEGACY_LOGIN_ENABLED:-false}"
     volumes:
       - "${RESOURCES_CORPUS_HOST:-./corpus}:/corpus:ro"
     ports:

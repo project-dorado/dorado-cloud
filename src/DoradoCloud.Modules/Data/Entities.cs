@@ -110,3 +110,16 @@ public sealed class Report
     public string Status { get; set; } = "open";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>A legacy Zune inbox message (inbox.zune.net compatibility store).</summary>
+public sealed class InboxMessage
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid? SenderAccountId { get; set; }
+    public string SenderTag { get; set; } = string.Empty;
+    public string RecipientTag { get; set; } = string.Empty;
+    public string Subject { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public bool IsRead { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}

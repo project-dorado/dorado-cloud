@@ -19,6 +19,7 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
     public DbSet<Badge> Badges => Set<Badge>();
     public DbSet<Block> Blocks => Set<Block>();
     public DbSet<Report> Reports => Set<Report>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -100,6 +101,16 @@ public sealed class DoradoDbContext(DbContextOptions<DoradoDbContext> options) :
             entity.HasIndex(r => r.Status);
             entity.Property(r => r.Reason).HasMaxLength(512).IsRequired();
             entity.Property(r => r.Status).HasMaxLength(24).IsRequired();
+        });
+
+        builder.Entity<InboxMessage>(entity =>
+        {
+            entity.HasKey(m => m.Id);
+            entity.HasIndex(m => new { m.RecipientTag, m.CreatedAt });
+            entity.Property(m => m.SenderTag).HasMaxLength(32);
+            entity.Property(m => m.RecipientTag).HasMaxLength(32).IsRequired();
+            entity.Property(m => m.Subject).HasMaxLength(256);
+            entity.Property(m => m.Body).HasMaxLength(4096);
         });
     }
 

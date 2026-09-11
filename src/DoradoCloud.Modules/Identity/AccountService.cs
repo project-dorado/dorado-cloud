@@ -93,6 +93,9 @@ public sealed class AccountService(
         var follows = await db.Follows.AsNoTracking()
             .Where(f => f.FollowerAccountId == accountId || f.FolloweeAccountId == accountId)
             .ToListAsync(cancellationToken);
+        var messages = await db.InboxMessages.AsNoTracking()
+            .Where(m => m.SenderAccountId == accountId)
+            .ToListAsync(cancellationToken);
 
         return new
         {
@@ -119,6 +122,7 @@ public sealed class AccountService(
             activities = activities.Select(a => new { a.Id, a.Kind, a.PayloadJson, a.CreatedAt }).ToList(),
             badges = badges.Select(b => new { b.Code, b.EarnedAt }).ToList(),
             follows = follows.Select(f => new { f.FollowerAccountId, f.FolloweeAccountId, f.CreatedAt }).ToList(),
+            messages = messages.Select(m => new { m.Id, m.RecipientTag, m.Subject, m.Body, m.CreatedAt }).ToList(),
         };
     }
 
@@ -151,6 +155,7 @@ public sealed class AccountService(
         db.Follows.RemoveRange(db.Follows.Where(f => f.FollowerAccountId == accountId || f.FolloweeAccountId == accountId));
         db.Blocks.RemoveRange(db.Blocks.Where(b => b.BlockerAccountId == accountId || b.BlockedAccountId == accountId));
         db.Reports.RemoveRange(db.Reports.Where(r => r.ReporterAccountId == accountId));
+        db.InboxMessages.RemoveRange(db.InboxMessages.Where(m => m.SenderAccountId == accountId));
         db.Accounts.Remove(account);
 
         await db.SaveChangesAsync(cancellationToken);

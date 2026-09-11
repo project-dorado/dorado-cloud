@@ -24,6 +24,19 @@ public sealed partial class SocialService(DoradoDbContext db)
     public Task<Profile?> GetByAccountAsync(Guid accountId, CancellationToken cancellationToken)
         => db.Profiles.FirstOrDefaultAsync(p => p.AccountId == accountId, cancellationToken);
 
+    /// <summary>Case-insensitive handle/display-name search (legacy member search).</summary>
+    public Task<List<Profile>> SearchAsync(string query, int limit, CancellationToken cancellationToken)
+    {
+        var normalized = (query ?? string.Empty).Trim().ToLowerInvariant();
+        var take = Math.Clamp(limit, 1, 50);
+
+        return db.Profiles
+            .Where(p => p.Handle.ToLower().Contains(normalized) || p.DisplayName.ToLower().Contains(normalized))
+            .OrderBy(p => p.Handle)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<(Profile? Profile, string? Error)> UpsertProfileAsync(
         Guid accountId,
         UpsertProfileRequest request,
