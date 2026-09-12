@@ -25,12 +25,70 @@ internal static class AuthTestHelper
     private static readonly Regex AntiforgeryPattern =
         new("name=\"__RequestVerificationToken\" value=\"([^\"]+)\"", RegexOptions.Compiled);
 
+    /// <summary>Extracts the antiforgery field from a rendered HTML page.</summary>
+    public static string TokenFromHtml(string html)
+    {
+        var match = AntiforgeryPattern.Match(html);
+        return match.Success ? match.Groups[1].Value : string.Empty;
+    }
+
     /// <summary>Fetches a page and extracts its antiforgery token.</summary>
     public static async Task<string> AntiforgeryTokenAsync(HttpClient client, string path)
     {
         var html = await client.GetStringAsync(path);
-        var match = AntiforgeryPattern.Match(html);
-        return match.Success ? match.Groups[1].Value : string.Empty;
+        return TokenFromHtml(html);
+    }
+
+    /// <summary>Builds an authorization-code + PKCE URL for the desktop client.</summary>
+    public static string AuthorizeUrl(string state = "state-1", string scopes = "openid dorado.api")
+    {
+        var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
+        var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+
+        return QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
+        {
+            ["client_id"] = "dorado-desktop",
+            ["response_type"] = "code",
+            ["scope"] = scopes,
+            ["redirect_uri"] = DesktopRedirect,
+            ["state"] = state,
+            ["code_challenge"] = challenge,
+            ["code_challenge_method"] = "S256"
+        });
+    }
+
+    /// <summary>Registers a user through the antiforgery-protected HTML form.</summary>
+    public static async Task<HttpResponseMessage> RegisterAsync(
+        HttpClient client,
+        string email,
+        string password = "password123",
+        string displayName = "Test User")
+    {
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["email"] = email,
+            ["password"] = password,
+            ["displayName"] = displayName,
+            ["__RequestVerificationToken"] = await AntiforgeryTokenAsync(client, "/account/register")
+        });
+
+        return await client.PostAsync("/account/register", form);
+    }
+
+    /// <summary>Signs in through the antiforgery-protected HTML form.</summary>
+    public static async Task<HttpResponseMessage> LoginAsync(
+        HttpClient client,
+        string email,
+        string password = "password123")
+    {
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["email"] = email,
+            ["password"] = password,
+            ["__RequestVerificationToken"] = await AntiforgeryTokenAsync(client, "/account/login")
+        });
+
+        return await client.PostAsync("/account/login", form);
     }
 
     /// <summary>Registers (or logs in) a user, consents, then runs authorization-code + PKCE.</summary>
@@ -38,27 +96,11 @@ internal static class AuthTestHelper
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var registerForm = new Dictionary<string, string>
-        {
-            ["email"] = email,
-            ["password"] = password,
-            ["displayName"] = "Test User",
-            ["__RequestVerificationToken"] = await AntiforgeryTokenAsync(client, "/account/register")
-        };
-
-        var register = await client.PostAsync("/account/register", new FormUrlEncodedContent(registerForm));
+        var register = await RegisterAsync(client, email, password);
 
         if (register.StatusCode != HttpStatusCode.Found)
         {
-            var loginForm = new Dictionary<string, string>
-            {
-                ["email"] = email,
-                ["password"] = password,
-                ["__RequestVerificationToken"] = await AntiforgeryTokenAsync(client, "/account/login")
-            };
-
-            var login = await client.PostAsync("/account/login", new FormUrlEncodedContent(loginForm));
-            login.EnsureSuccessStatusCode();
+            (await LoginAsync(client, email, password)).EnsureSuccessStatusCode();
         }
 
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));

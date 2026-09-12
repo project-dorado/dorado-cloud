@@ -67,6 +67,28 @@ public sealed class EmbeddingServiceTests : IDisposable
     public void Cosine_is_computed(float[] a, float[] b, double expected)
         => Assert.Equal(expected, EmbeddingService.Cosine(a, b), 6);
 
+    [Fact]
+    public async Task Pgvector_flag_degrades_to_the_in_memory_scan_on_sqlite()
+    {
+        using var db = NewContext();
+        var service = new EmbeddingService(
+            db,
+            Options.Create(new EmbeddingOptions { Enabled = true, UsePgvector = true }),
+            NullLogger<EmbeddingService>.Instance);
+
+        await service.UpsertAsync("a", "A", new[] { 1f, 0f, 0f }, CancellationToken.None);
+        await service.UpsertAsync("b", "B", new[] { 0f, 1f, 0f }, CancellationToken.None);
+        await service.UpsertAsync("c", "C", new[] { 0.9f, 0.1f, 0f }, CancellationToken.None);
+
+        // The portable JSON column remains authoritative when pgvector is absent.
+        Assert.Equal(new[] { 0.9f, 0.1f, 0f }, await service.GetVectorAsync("c", CancellationToken.None));
+
+        // The unavailable pgvector SQL must fall back, not throw or return empty.
+        var nearest = await service.NearestAsync(new[] { 1f, 0f, 0f }, 2, CancellationToken.None);
+
+        Assert.Equal(new[] { "a", "c" }, nearest.Select(n => n.Mbid).ToArray());
+    }
+
     public void Dispose()
     {
         foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })

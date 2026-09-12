@@ -139,4 +139,119 @@ public sealed class IdentitySecurityEndpointTests(CloudApiFactory factory) : ICl
         Assert.Equal(HttpStatusCode.Found, login.StatusCode);
         Assert.Equal("/", login.Headers.Location!.OriginalString);
     }
+
+    [Fact]
+    public async Task Login_rejects_an_invalid_antiforgery_token()
+    {
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await client.GetAsync("/account/login"); // establishes the antiforgery cookie
+
+        var response = await client.PostAsync("/account/login", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["email"] = "nobody@dorado.local",
+            ["password"] = "password123",
+            ["__RequestVerificationToken"] = "not-a-real-token"
+        }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/account/register")]
+    [InlineData("/account/forgot-password")]
+    [InlineData("/account/reset-password")]
+    [InlineData("/account/consent")]
+    public async Task Html_forms_reject_a_missing_antiforgery_token(string path)
+    {
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.PostAsync(path, new FormUrlEncodedContent(new Dictionary<string, string>()));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Consent_grant_flow_lists_scopes_then_issues_an_authorization_code()
+    {
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var email = AuthTestHelper.NewEmail();
+        Assert.Equal(HttpStatusCode.Found, (await AuthTestHelper.RegisterAsync(client, email)).StatusCode);
+
+        var authorizeUrl = AuthorizeUrl("state-1");
+        var authorize = await client.GetAsync(authorizeUrl);
+
+        Assert.Equal(HttpStatusCode.OK, authorize.StatusCode);
+        var consentHtml = await authorize.Content.ReadAsStringAsync();
+        Assert.Contains("dorado-desktop", consentHtml);
+        Assert.Contains("dorado.api", consentHtml);
+
+        var consent = await client.PostAsync("/account/consent", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["returnUrl"] = authorizeUrl,
+            ["clientId"] = "dorado-desktop",
+            ["scope"] = "openid dorado.api",
+            ["allow"] = "true",
+            ["__RequestVerificationToken"] = AuthTestHelper.TokenFromHtml(consentHtml)
+        }));
+        Assert.Equal(HttpStatusCode.Found, consent.StatusCode);
+
+        var reauthorize = await client.GetAsync(consent.Headers.Location!);
+        Assert.Equal(HttpStatusCode.Found, reauthorize.StatusCode);
+        Assert.StartsWith(AuthTestHelper.DesktopRedirect, reauthorize.Headers.Location!.ToString());
+        Assert.False(string.IsNullOrWhiteSpace(
+            Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(reauthorize.Headers.Location!.Query)["code"].ToString()));
+    }
+
+    [Fact]
+    public async Task Consent_denial_redirects_to_the_client_with_access_denied()
+    {
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var email = AuthTestHelper.NewEmail();
+        Assert.Equal(HttpStatusCode.Found, (await AuthTestHelper.RegisterAsync(client, email)).StatusCode);
+
+        var authorizeUrl = AuthorizeUrl("state-1");
+        var authorize = await client.GetAsync(authorizeUrl);
+        var consentHtml = await authorize.Content.ReadAsStringAsync();
+
+        var consent = await client.PostAsync("/account/consent", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["returnUrl"] = authorizeUrl,
+            ["clientId"] = "dorado-desktop",
+            ["scope"] = "openid dorado.api",
+            ["allow"] = "false",
+            ["__RequestVerificationToken"] = AuthTestHelper.TokenFromHtml(consentHtml)
+        }));
+
+        Assert.Equal(HttpStatusCode.Found, consent.StatusCode);
+        Assert.StartsWith(AuthTestHelper.DesktopRedirect, consent.Headers.Location!.ToString());
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(
+            new Uri(consent.Headers.Location!.ToString()).Query);
+        Assert.Equal("access_denied", query["error"].ToString());
+        Assert.Equal("state-1", query["state"].ToString());
+
+        // Denial records no grant: authorize prompts again.
+        var again = await client.GetAsync(authorizeUrl);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Contains("__RequestVerificationToken", await again.Content.ReadAsStringAsync());
+    }
+
+    private static string AuthorizeUrl(string state)
+    {
+        var verifier = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var challenge = Convert.ToBase64String(
+                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(verifier)))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        return Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
+        {
+            ["client_id"] = "dorado-desktop",
+            ["response_type"] = "code",
+            ["scope"] = "openid dorado.api",
+            ["redirect_uri"] = AuthTestHelper.DesktopRedirect,
+            ["state"] = state,
+            ["code_challenge"] = challenge,
+            ["code_challenge_method"] = "S256"
+        });
+    }
 }

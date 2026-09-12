@@ -119,6 +119,10 @@ helm install dorado-cloud deploy/helm/dorado-cloud \
 |---|---|---|
 | `POST /account/register`, `POST /account/login`, `POST /account/logout` | cookie | interactive account lifecycle |
 | `GET /connect/authorize`, `POST /connect/token` | OIDC | authorization-code + PKCE, refresh, client credentials |
+| `POST /account/consent` | cookie + antiforgery | OIDC consent (allow/deny; denial redirects `error=access_denied`) |
+| `GET /account/verify-email?token=` | single-use token | confirm an email address |
+| `GET/POST /account/forgot-password` | antiforgery | request a reset link (never reveals whether the account exists) |
+| `GET/POST /account/reset-password` | single-use token + antiforgery | set a new password (expiring token) |
 | `GET /v1/identity/me` | bearer | current account/service principal |
 | `GET/POST /v1/identity/me/devices`, `DELETE …/{id}` | bearer (account) | device registry |
 | `GET/PUT /v1/identity/me/settings` | bearer (account) | settings sync (versioned) |

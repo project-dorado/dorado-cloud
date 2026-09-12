@@ -3,7 +3,7 @@
 Backend services for [Dorado](https://github.com/project-dorado/dorado) (desktop)
 and [Dorado-HD](https://github.com/project-dorado/dorado-hd) (Android).
 
-**Last updated:** 2026-09-11 · **HEAD:** `main` · **Tests:** 181/181 (164 integration + 17 client) · **Build:** 0 warnings (`/warnaserror`) · **CI:** green (build+test, api & gateway images → ghcr)
+**Last updated:** 2026-09-11 · **HEAD:** `main` · **Tests:** 195/195 (178 integration + 17 client) · **Build:** 0 warnings (`/warnaserror`) · **CI:** green (build+test, api & gateway images → ghcr)
 
 Legend: ✅ done · 🚧 in progress · ⏳ pending
 
@@ -36,6 +36,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ pending
 - **Recommendations**: `GET/POST /v1/recs/quickmix`.
 - **Schema**: versioned EF Core **migrations** (`src/DoradoCloud.Modules/Data/Migrations`, includes the OpenIddict tables); `MigrateAsync` on PostgreSQL, `EnsureCreated` for local SQLite (author with the repo-local `dotnet-ef` tool).
 - **Hardening**: auth rate limiting (per-IP, path-partitioned), fail-closed admin outside development, CORS allowlist (`Cors:AllowedOrigins`), dev-only smoke client, GDPR export + erasure (`GET /v1/identity/me/export`, `DELETE /v1/identity/me` — revokes OIDC tokens).
+- **Identity hardening (M11)**: antiforgery on every HTML form (missing/invalid tokens → `400`), OIDC consent screen with accept/deny (`error=access_denied` redirect), hashed single-use email-verification/password-reset tokens with TTLs, pluggable `IEmailSender`, and enforced `Identity:Security:RequireEmailVerification`.
 - **Client integration**: the client SDK centralizes auth (`DoradoCloudAuthHandler`, `AddDoradoCloudAuth`); the desktop and Android update-checks are live.
 - **Ops**: Dockerfiles, `docker-compose` (Postgres/Redis/MinIO), Helm chart, OpenTelemetry (opt-in OTLP), health probes, Swagger, [runbooks](docs/ops/).
 - **Legacy Zune compat (M7, phases 0–4)**: `EndpointModuleBase` host dispatch (`RequireHost`) + `DoradoCloud.Legacy` Atom/XML toolkit; `catalog.zune.net` (hubs/genres/albums/artists/tracks/charts + app catalog), `image.catalog.zune.net`, `resources.zune.net` (firmware manifest + baseline CABs), `mix.zune.net`, `socialapi.zune.net`, `inbox.zune.net` (`InboxMessage` store), `tiles.zune.net`, `tuners.zune.net`, `fai.music.metaservices.microsoft.com`, and a gated `login.zune.net` WS-Trust bridge. Corpora are external/untracked and fail closed; no commerce/DRM.
@@ -46,8 +47,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ pending
 |---|---|---|
 | **M6 — Media (PD/CC only)** | P1 (legal) | License-gated catalog + streaming from Internet Archive / Wikimedia; requires legal sign-off. No copyrighted media. |
 | **Client integration (remaining)** | P1 | Interactive browser-PKCE E2E; wire any remaining desktop surfaces (`IMixviewService`, `ICloudUpdateService` apply path). |
-| **pgvector QuickMix upgrade** | P2 | Replace heuristic scoring with embeddings (ListenBrainz/AcousticBrainz); endpoint contract already stable. |
-| **Identity hardening (remaining)** | P2 | Consent screen, CSRF/antiforgery on the HTML forms, email verification, password reset. |
+| **Embedding scoring replacement** | P2 | Heuristic + embedding blend shipped (pgvector opt-in, in-memory fallback); replacing the heuristic with a full ListenBrainz/AcousticBrainz pipeline remains. |
 | **Native providers** | P2 | Discogs / TheAudioDB / Fanart.tv enrichment beyond MusicBrainz + CAA. |
 | **Legacy compat follow-ups** | P1 | Interactive E2E against a real hosts-patched Zune 4.8 / Zune HD client; legacy login token trust model (WS-Trust bridge still gated); keyless artist imagery for `image.catalog.zune.net`. |
 | **Ops** | P3 | Redis cache tuning, backup/restore runbook, metrics dashboards, moderation ops docs. |

@@ -88,7 +88,12 @@ public sealed class EmbeddingService(
         if (options.Value.UsePgvector)
         {
             var accelerated = await TryPgVectorAsync(query, k, cancellationToken);
-            if (accelerated is not null)
+
+            // A successful-but-empty pgvector read means rows exist only with the
+            // JSON column populated (e.g. the vector column was added after
+            // ingestion); fall through to the in-memory scan instead of losing
+            // neighbours.
+            if (accelerated is { Count: > 0 })
             {
                 return accelerated;
             }

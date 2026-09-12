@@ -1,6 +1,7 @@
 using DoradoCloud.Modules.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 
 namespace DoradoCloud.Modules.Identity;
@@ -10,7 +11,8 @@ public sealed class AccountService(
     DoradoDbContext db,
     IPasswordHasher<Account> hasher,
     IOpenIddictTokenManager tokenManager,
-    IOpenIddictAuthorizationManager authorizationManager)
+    IOpenIddictAuthorizationManager authorizationManager,
+    IOptions<IdentitySecurityOptions> security)
 {
     public static string Normalize(string email) => email.Trim().ToLowerInvariant();
 
@@ -66,6 +68,14 @@ public sealed class AccountService(
     {
         var account = await FindByEmailAsync(email, cancellationToken);
         if (account is null || !account.IsActive)
+        {
+            return null;
+        }
+
+        // When the operator requires verification, an unverified email cannot
+        // complete a password sign-in. The error stays generic to callers
+        // (see the login endpoint) so it does not leak account state.
+        if (security.Value.RequireEmailVerification && !account.EmailVerified)
         {
             return null;
         }

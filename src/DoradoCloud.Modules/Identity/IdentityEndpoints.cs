@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
@@ -87,6 +88,15 @@ public static class IdentityEndpoints
             }
 
             await SendVerificationEmailAsync(account, tokens, email, security.Value, cancellationToken);
+
+            if (security.Value.RequireEmailVerification)
+            {
+                // No cookie session until the emailed link is followed; otherwise
+                // registration would bypass the sign-in verification gate.
+                return Page("create account",
+                    "<p>Check your inbox to verify your email address, then <a href=\"/account/login\">sign in</a>.</p>");
+            }
+
             await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, BuildPrincipal(account));
             return Results.Redirect("/");
         }).WithName("register_submit");
@@ -173,7 +183,11 @@ public static class IdentityEndpoints
         }).WithName("reset_password_submit");
 
         endpoints.MapPost("/account/consent", async (
-            HttpContext context, ConsentService consent, IAntiforgery antiforgery, CancellationToken cancellationToken) =>
+            HttpContext context,
+            ConsentService consent,
+            IOpenIddictApplicationManager applications,
+            IAntiforgery antiforgery,
+            CancellationToken cancellationToken) =>
         {
             if (!await ValidAntiforgeryAsync(context, antiforgery))
             {
@@ -193,8 +207,7 @@ public static class IdentityEndpoints
 
             if (!string.Equals(form["allow"].ToString(), "true", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Content(
-                    Render("authorize", "<p class=\"err\">Access denied.</p>", null), "text/html", statusCode: 403);
+                return await DenyConsentAsync(context, form, applications, cancellationToken);
             }
 
             var scopes = form["scope"].ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -239,6 +252,21 @@ public static class IdentityEndpoints
             if (account is null)
             {
                 return Results.Forbid();
+            }
+
+            // Defense in depth: a cookie session created before verification was
+            // required must not mint OIDC tokens for an unverified email.
+            var security = context.RequestServices.GetRequiredService<IOptions<IdentitySecurityOptions>>().Value;
+            if (security.RequireEmailVerification && !account.EmailVerified)
+            {
+                return Results.Forbid(
+                    new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.AccessDenied,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] =
+                            "The email address for this account has not been verified."
+                    }),
+                    new[] { OpenIddictServerAspNetCoreDefaults.AuthenticationScheme });
             }
 
             // Require explicit consent before issuing tokens for these scopes.
@@ -327,6 +355,48 @@ public static class IdentityEndpoints
             "Verify your Dorado Cloud email",
             $"<p>Confirm your email address: <a href=\"{link}\">{link}</a></p>",
             cancellationToken);
+    }
+
+    private static async Task<IResult> DenyConsentAsync(
+        HttpContext context,
+        IFormCollection form,
+        IOpenIddictApplicationManager applications,
+        CancellationToken cancellationToken)
+    {
+        // Denial is an OIDC error response: redirect back to the client with
+        // error=access_denied. The destination must be a redirect URI actually
+        // registered for the requesting client (no open redirect).
+        var returnUrl = SafeLocalUrl(form["returnUrl"].ToString());
+        var query = QueryHelpers.ParseQuery(new Uri("http://localhost" + returnUrl).Query);
+        var redirectUri = query.TryGetValue("redirect_uri", out var value) ? value.ToString() : null;
+        var state = query.TryGetValue("state", out var stateValue) ? stateValue.ToString() : null;
+        var clientId = form["clientId"].ToString();
+
+        if (!string.IsNullOrWhiteSpace(redirectUri) && !string.IsNullOrWhiteSpace(clientId))
+        {
+            var application = await applications.FindByClientIdAsync(clientId, cancellationToken);
+            if (application is not null)
+            {
+                var registered = await applications.GetRedirectUrisAsync(application, cancellationToken);
+                if (registered.Contains(redirectUri, StringComparer.Ordinal))
+                {
+                    var parameters = new Dictionary<string, string?>
+                    {
+                        ["error"] = OpenIddictConstants.Errors.AccessDenied
+                    };
+                    if (!string.IsNullOrEmpty(state))
+                    {
+                        parameters["state"] = state;
+                    }
+
+                    return Results.Redirect(QueryHelpers.AddQueryString(redirectUri, parameters));
+                }
+            }
+        }
+
+        // Unverifiable client/redirect: fail closed with the local denial page.
+        return Results.Content(
+            Render("authorize", "<p class=\"err\">Access denied.</p>", null), "text/html", statusCode: 403);
     }
 
     private static ClaimsPrincipal BuildPrincipal(Account account, IEnumerable<string>? scopes = null)
