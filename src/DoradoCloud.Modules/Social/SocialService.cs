@@ -375,8 +375,42 @@ public sealed partial class SocialService(DoradoDbContext db)
                 message.RecipientTag,
                 message.Subject,
                 message.Body,
+                message.IsRead,
                 message.CreatedAt))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Marks one of the signed-in account's inbox messages read. Returns false
+    /// when the account has no profile or the message is not addressed to them
+    /// (so a caller can answer 404 without leaking other recipients' ids).
+    /// </summary>
+    public async Task<bool> MarkInboxReadAsync(
+        Guid accountId,
+        Guid messageId,
+        CancellationToken cancellationToken)
+    {
+        var profile = await GetByAccountAsync(accountId, cancellationToken);
+        if (profile is null)
+        {
+            return false;
+        }
+
+        var recipient = profile.Handle.Trim().ToLowerInvariant();
+        var message = await db.InboxMessages.FirstOrDefaultAsync(
+            m => m.Id == messageId && m.RecipientTag == recipient, cancellationToken);
+        if (message is null)
+        {
+            return false;
+        }
+
+        if (!message.IsRead)
+        {
+            message.IsRead = true;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return true;
     }
 
     private async Task<Dictionary<Guid, string>> HandlesForAsync(

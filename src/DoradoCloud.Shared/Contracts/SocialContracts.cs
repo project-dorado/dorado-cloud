@@ -56,6 +56,7 @@ public sealed record InboxMessageDto(
     string RecipientTag,
     string Subject,
     string Body,
+    bool IsRead,
     DateTimeOffset CreatedAt);
 
 // ---- Moderation ---------------------------------------------------------

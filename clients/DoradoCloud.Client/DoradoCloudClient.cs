@@ -214,6 +214,13 @@ public sealed class DoradoCloudClient(HttpClient http)
         return await response.Content.ReadFromJsonAsync<ActivityDto>(JsonOptions, cancellationToken);
     }
 
+    /// <summary>The authenticated user's inbox (same store the legacy inbox.zune.net route writes).</summary>
+    public async Task<IReadOnlyList<InboxMessageDto>?> GetInboxAsync(int? limit = null, CancellationToken cancellationToken = default)
+    {
+        var qs = $"?limit={(limit ?? 50).ToString()}";
+        return await http.GetFromJsonAsync<IReadOnlyList<InboxMessageDto>>($"v1/social/me/inbox{qs}", JsonOptions, cancellationToken);
+    }
+
     /// <summary>Manually grants a badge code (admin/seed flow).</summary>
     public async Task<bool> GrantBadgeAsync(string code, CancellationToken cancellationToken = default)
     {

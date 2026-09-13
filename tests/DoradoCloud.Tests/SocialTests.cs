@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using DoradoCloud.Shared.Contracts;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DoradoCloud.Tests;
@@ -148,17 +150,7 @@ public sealed class SocialTests(CloudApiFactory factory) : IClassFixture<CloudAp
         var (alice, aliceHandle) = await NewProfileAsync("alice");
         var (bob, _) = await NewProfileAsync("bob");
 
-        // A legacy Zune client writes through the host-constrained route.
-        const string body = "<Message><Subject>Hello</Subject><Body>Howdy, Zune!</Body></Message>";
-        using var send = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/messaging/{aliceHandle}/send?from=mira")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/xml")
-        };
-        send.Headers.Host = "inbox.zune.net";
-        var sent = await factory.CreateClient().SendAsync(send);
-        sent.EnsureSuccessStatusCode();
+        await SendLegacyAsync(aliceHandle, "mira", "Hello", "Howdy, Zune!");
 
         // The modern client reads the same store without the legacy host.
         var inbox = await alice.GetFromJsonAsync<List<InboxMessageDto>>("/v1/social/me/inbox");
@@ -166,9 +158,66 @@ public sealed class SocialTests(CloudApiFactory factory) : IClassFixture<CloudAp
         Assert.Equal("mira", message.SenderTag);
         Assert.Equal(aliceHandle, message.RecipientTag);
         Assert.Contains("Howdy, Zune!", message.Body);
+        Assert.False(message.IsRead);
 
         // The inbox is scoped to the signed-in handle.
         var bobInbox = await bob.GetFromJsonAsync<List<InboxMessageDto>>("/v1/social/me/inbox");
         Assert.DoesNotContain(bobInbox!, m => m.Subject == "Hello");
+    }
+
+    [Fact]
+    public async Task Inbox_mark_read_updates_state_and_is_scoped_to_the_recipient()
+    {
+        var (alice, aliceHandle) = await NewProfileAsync("alice");
+        var (bob, _) = await NewProfileAsync("bob");
+
+        await SendLegacyAsync(aliceHandle, "mira", "Hello", "hi");
+
+        var before = await alice.GetFromJsonAsync<List<InboxMessageDto>>("/v1/social/me/inbox");
+        var message = before!.Single(m => m.Subject == "Hello");
+
+        var marked = await alice.PostAsync($"/v1/social/me/inbox/{message.Id}/read", null);
+        Assert.Equal(HttpStatusCode.NoContent, marked.StatusCode);
+
+        var after = await alice.GetFromJsonAsync<List<InboxMessageDto>>("/v1/social/me/inbox");
+        Assert.True(after!.Single(m => m.Id == message.Id).IsRead);
+
+        // A different signed-in handle cannot mark someone else's message.
+        var foreign = await bob.PostAsync($"/v1/social/me/inbox/{message.Id}/read", null);
+        Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+    }
+
+    [Fact]
+    public void Modern_social_routes_are_host_agnostic()
+    {
+        // Guard: the modern /v1/social surface must not be host-constrained.
+        // A route that only answers on a legacy Host is exactly the bug that
+        // made the HD cloud inbox silently unreachable; keep it from recurring.
+        var endpoints = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints;
+        var social = endpoints.OfType<RouteEndpoint>()
+            .Where(e => (e.RoutePattern.RawText ?? string.Empty).Contains("v1/social", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.NotEmpty(social);
+        Assert.All(social, endpoint =>
+            Assert.DoesNotContain(endpoint.Metadata, m => m.GetType().Name == "HostAttribute"));
+
+        Assert.Contains(social, e => (e.RoutePattern.RawText ?? string.Empty).TrimStart('/') == "v1/social/me/inbox");
+        Assert.Contains(social, e => (e.RoutePattern.RawText ?? string.Empty).TrimStart('/') == "v1/social/me/inbox/{id:guid}/read");
+    }
+
+    private async Task SendLegacyAsync(string handle, string from, string subject, string body)
+    {
+        using var send = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/messaging/{handle}/send?from={from}")
+        {
+            Content = new StringContent(
+                $"<Message><Subject>{subject}</Subject><Body>{body}</Body></Message>",
+                Encoding.UTF8,
+                "application/xml")
+        };
+        send.Headers.Host = "inbox.zune.net";
+        (await factory.CreateClient().SendAsync(send)).EnsureSuccessStatusCode();
     }
 }

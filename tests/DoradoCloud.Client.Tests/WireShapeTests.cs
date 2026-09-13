@@ -133,6 +133,21 @@ public sealed class WireShapeTests
     }
 
     [Fact]
+    public async Task GetInboxAsync_PassesLimitAndDeserializesMessages()
+    {
+        var json = "[{\"id\":\"11111111-1111-1111-1111-111111111111\",\"senderTag\":\"mira\",\"recipientTag\":\"jane\",\"subject\":\"hello\",\"body\":\"hi there\",\"createdAt\":\"2026-01-02T03:04:05Z\"}]";
+        var client = NewGetClient("/v1/social/me/inbox?limit=25", HttpStatusCode.OK, json);
+
+        var inbox = await client.GetInboxAsync(limit: 25);
+
+        Assert.NotNull(inbox);
+        var message = inbox!.Single();
+        Assert.Equal("mira", message.SenderTag);
+        Assert.Equal("jane", message.RecipientTag);
+        Assert.Equal("hello", message.Subject);
+    }
+
+    [Fact]
     public async Task FollowAsync_PostsToExpectedRoute()
     {
         var handler = new MockHttpHandler((req, _) =>
