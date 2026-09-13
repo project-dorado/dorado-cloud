@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using DoradoCloud.Shared.Contracts;
 using Xunit;
 
@@ -129,5 +130,45 @@ public sealed class SocialTests(CloudApiFactory factory) : IClassFixture<CloudAp
         var duplicate = await other.PutAsJsonAsync("/v1/social/profiles/me", new UpsertProfileRequest(handle, "Second", null));
 
         Assert.Equal(HttpStatusCode.BadRequest, duplicate.StatusCode);
+    }
+
+    [Fact]
+    public async Task Inbox_requires_a_bearer_token()
+    {
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/v1/social/me/inbox");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Legacy_sent_message_appears_in_the_modern_inbox()
+    {
+        var (alice, aliceHandle) = await NewProfileAsync("alice");
+        var (bob, _) = await NewProfileAsync("bob");
+
+        // A legacy Zune client writes through the host-constrained route.
+        const string body = "<Message><Subject>Hello</Subject><Body>Howdy, Zune!</Body></Message>";
+        using var send = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/messaging/{aliceHandle}/send?from=mira")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/xml")
+        };
+        send.Headers.Host = "inbox.zune.net";
+        var sent = await factory.CreateClient().SendAsync(send);
+        sent.EnsureSuccessStatusCode();
+
+        // The modern client reads the same store without the legacy host.
+        var inbox = await alice.GetFromJsonAsync<List<InboxMessageDto>>("/v1/social/me/inbox");
+        var message = inbox!.Single(m => m.Subject == "Hello");
+        Assert.Equal("mira", message.SenderTag);
+        Assert.Equal(aliceHandle, message.RecipientTag);
+        Assert.Contains("Howdy, Zune!", message.Body);
+
+        // The inbox is scoped to the signed-in handle.
+        var bobInbox = await bob.GetFromJsonAsync<List<InboxMessageDto>>("/v1/social/me/inbox");
+        Assert.DoesNotContain(bobInbox!, m => m.Subject == "Hello");
     }
 }

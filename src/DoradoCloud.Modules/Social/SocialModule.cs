@@ -152,6 +152,17 @@ public sealed class SocialModule : EndpointModuleBase
             return Results.Ok(await social.FeedAsync(accountId, limit ?? 30, offset ?? 0, cancellationToken));
         }).RequireAuthorization().WithName("social_feed");
 
+        group.MapGet("/me/inbox", async (
+            int? limit, ClaimsPrincipal user, SocialService social, CancellationToken cancellationToken) =>
+        {
+            if (user.GetAccountId() is not Guid accountId)
+            {
+                return Results.Forbid();
+            }
+
+            return Results.Ok(await social.InboxAsync(accountId, limit ?? 50, cancellationToken));
+        }).RequireAuthorization().WithName("social_inbox");
+
         group.MapPost("/me/activities", async (
             PostActivityRequest request, ClaimsPrincipal user, SocialService social, CancellationToken cancellationToken) =>
         {

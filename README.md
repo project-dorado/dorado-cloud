@@ -189,6 +189,7 @@ distributed cache (Redis in the compose stack, in-process otherwise).
 | `PUT/GET /v1/social/profiles/me` | bearer | create/update or read own profile |
 | `POST/DELETE /v1/social/profiles/{handle}/follow` | bearer | follow / unfollow |
 | `GET /v1/social/me/feed`, `POST /v1/social/me/activities` | bearer | feed & posting |
+| `GET /v1/social/me/inbox` | bearer | inbox (JSON; same `InboxMessage` store as legacy `inbox.zune.net`) |
 | `POST /v1/social/me/badges/{code}` | bearer | grant a badge |
 | `POST/DELETE /v1/social/profiles/{handle}/block`, `GET /v1/social/me/blocks` | bearer | blocking |
 | `POST /v1/social/reports` | bearer | file a report |

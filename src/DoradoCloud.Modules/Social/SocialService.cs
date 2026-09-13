@@ -343,6 +343,42 @@ public sealed partial class SocialService(DoradoDbContext db)
             dto.Followers, dto.Following, dto.Activities, badges, recent);
     }
 
+    // ---- inbox -----------------------------------------------------------
+
+    /// <summary>
+    /// The signed-in account's inbox, keyed by their profile handle. Reads the
+    /// same <c>InboxMessage</c> store the legacy module writes, so modern
+    /// clients get the messages without the legacy host. Empty when the account
+    /// has no profile yet.
+    /// </summary>
+    public async Task<List<InboxMessageDto>> InboxAsync(
+        Guid accountId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var profile = await GetByAccountAsync(accountId, cancellationToken);
+        if (profile is null)
+        {
+            return [];
+        }
+
+        var recipient = profile.Handle.Trim().ToLowerInvariant();
+        var take = Math.Clamp(limit, 1, 100);
+
+        return await db.InboxMessages
+            .Where(message => message.RecipientTag == recipient)
+            .OrderByDescending(message => message.CreatedAt)
+            .Take(take)
+            .Select(message => new InboxMessageDto(
+                message.Id,
+                message.SenderTag,
+                message.RecipientTag,
+                message.Subject,
+                message.Body,
+                message.CreatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
     private async Task<Dictionary<Guid, string>> HandlesForAsync(
         IEnumerable<Guid> accountIds,
         CancellationToken cancellationToken)
